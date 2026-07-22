@@ -3,7 +3,9 @@ import {
   Mountain, Wallet, ListChecks, CalendarDays, MapPin, Clock,
   Check, Plus, Trash2, ChevronLeft, ChevronRight, AlertTriangle,
   BedDouble, Pencil, RotateCcw, Ship, Utensils, Car, Footprints,
+  Cloud, CloudOff, RefreshCw,
 } from "lucide-react";
+import { configurado, carregarNuvem, salvarNuvem, ouvirNuvem, ID_VIAGEM } from "./supabase";
 
 /* ─────────────────────────  DADOS INICIAIS  ───────────────────────── */
 
@@ -223,6 +225,12 @@ export default function App() {
   const [ativo, setAtivo] = useState(0);
   const [aba, setAba] = useState("roteiro");
   const [fundo, setFundo] = useState(0);
+  const [sinc, setSinc] = useState(configurado ? "carregando" : "local");
+  const [erroSinc, setErroSinc] = useState("");
+
+  /* Evita que a gravação dispare por mudanças vindas da própria nuvem */
+  const ignorarProximo = useRef(false);
+  const primeiroSalvamento = useRef(true);
 
   useEffect(() => {
     const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -231,6 +239,7 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
 
+  /* 1. Cache local primeiro — app abre instantâneo, funciona sem sinal */
   useEffect(() => {
     try {
       const salvo = window.localStorage.getItem(CHAVE);
@@ -239,9 +248,62 @@ export default function App() {
     setCarregado(true);
   }, []);
 
+  /* 2. Depois busca a nuvem e sobrepõe */
+  useEffect(() => {
+    if (!carregado || !configurado) return;
+    let vivo = true;
+
+    (async () => {
+      try {
+        const remoto = await carregarNuvem();
+        if (!vivo) return;
+        if (remoto?.dados) {
+          ignorarProximo.current = true;
+          setEstado({ ...ESTADO_INICIAL, ...remoto.dados });
+        }
+        setSinc("ok");
+      } catch (e) {
+        if (!vivo) return;
+        setErroSinc(e.message || "falha ao conectar");
+        setSinc("erro");
+      }
+    })();
+
+    return () => { vivo = false; };
+  }, [carregado]);
+
+  /* 3. Escuta alterações feitas em outros aparelhos */
+  useEffect(() => {
+    if (!carregado || !configurado) return;
+    return ouvirNuvem(({ dados }) => {
+      ignorarProximo.current = true;
+      setEstado({ ...ESTADO_INICIAL, ...dados });
+    });
+  }, [carregado]);
+
+  /* 4. Grava: local na hora, nuvem com atraso para não spammar */
   useEffect(() => {
     if (!carregado) return;
-    try { window.localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch (e) { /* sem persistência */ }
+    try { window.localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch (e) { /* sem cache */ }
+
+    if (!configurado) return;
+
+    if (ignorarProximo.current) { ignorarProximo.current = false; return; }
+    if (primeiroSalvamento.current) { primeiroSalvamento.current = false; return; }
+
+    setSinc("salvando");
+    const t = setTimeout(async () => {
+      try {
+        await salvarNuvem(estado);
+        setSinc("ok");
+        setErroSinc("");
+      } catch (e) {
+        setErroSinc(e.message || "falha ao salvar");
+        setSinc("erro");
+      }
+    }, 1200);
+
+    return () => clearTimeout(t);
   }, [estado, carregado]);
 
   const totalRoteiro = useMemo(
@@ -324,8 +386,29 @@ export default function App() {
 
         {/* Cabeçalho */}
         <header className="mb-6">
-          <div className="flex items-center gap-2 text-cyan-300/90 text-[11px] font-semibold tracking-[0.25em] uppercase mb-2">
-            <Mountain size={14} /> 06 – 17 de dezembro
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2 text-cyan-300/90 text-[11px] font-semibold tracking-[0.25em] uppercase">
+              <Mountain size={14} /> 06 – 17 de dezembro
+            </div>
+            <div
+              title={
+                sinc === "erro" ? `Erro: ${erroSinc}`
+                : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
+                : "Sincronizado entre seus aparelhos"
+              }
+              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 ${
+                sinc === "ok" ? "text-emerald-300 border-emerald-400/30 bg-emerald-500/10"
+                : sinc === "erro" ? "text-rose-300 border-rose-400/30 bg-rose-500/10"
+                : sinc === "local" ? "text-white/40 border-white/15 bg-white/5"
+                : "text-cyan-300 border-cyan-400/30 bg-cyan-500/10"
+              }`}
+            >
+              {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
+              {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
+              {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
+              {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
+              {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
+            </div>
           </div>
           <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-none">Patagônia</h1>
           <p className="mt-2 text-white/60 text-sm">2 adultos + 1 criança · 12 dias · Argentina e Chile</p>
@@ -753,7 +836,9 @@ export default function App() {
         )}
 
         <footer className="mt-8 text-center text-[11px] text-white/30">
-          Suas edições ficam salvas neste navegador.
+          {configurado
+            ? `Sincronizado na nuvem · ${ID_VIAGEM}`
+            : "Salvo apenas neste navegador — configure a sincronização para usar em outros aparelhos."}
         </footer>
       </div>
     </div>
