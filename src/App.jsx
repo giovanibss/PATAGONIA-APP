@@ -281,6 +281,15 @@ export default function App() {
   const alternarAlerta = (id) =>
     setEstado((s) => ({ ...s, alertas: s.alertas.map((a) => (a.id === id ? { ...a, feito: !a.feito } : a)) }));
 
+  const atualizarAlerta = (id, campo, valor) =>
+    setEstado((s) => ({ ...s, alertas: s.alertas.map((a) => (a.id === id ? { ...a, [campo]: valor } : a)) }));
+
+  const removerAlerta = (id) =>
+    setEstado((s) => ({ ...s, alertas: s.alertas.filter((a) => a.id !== id) }));
+
+  const adicionarAlerta = () =>
+    setEstado((s) => ({ ...s, alertas: [...s.alertas, { id: `al-${Date.now()}`, texto: "Nova pendência", critico: false, feito: false }] }));
+
   const atualizarSlot = (baseId, slotId, campo, valor) =>
     setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
       : { ...b, slots: b.slots.map((sl) => (sl.id === slotId ? { ...sl, [campo]: valor } : sl)) }) }));
@@ -523,30 +532,78 @@ export default function App() {
         {/* CHECKLIST */}
         {aba === "checklist" && (
           <div className={`${vidro} rounded-2xl p-6`}>
-            <h2 className="text-xl font-bold mb-1">Antes de viajar</h2>
-            <p className="text-sm text-white/50 mb-6">Sem a autorização do carro vocês são barrados nas travessias dos dias 6 e 9.</p>
+            <div className="flex items-baseline justify-between gap-3 mb-1">
+              <h2 className="text-xl font-bold">Antes de viajar</h2>
+              <span className="text-sm text-white/45 tabular-nums shrink-0">{feitos}/{estado.alertas.length}</span>
+            </div>
+            <p className="text-sm text-white/50 mb-6">
+              Clique no texto para editar. O sino marca as pendências críticas.
+            </p>
+
+            {estado.alertas.length === 0 && (
+              <p className="text-sm text-white/30 italic py-6 text-center">
+                Nenhuma pendência. Use o botão abaixo para adicionar.
+              </p>
+            )}
+
             <ul className="space-y-2">
               {estado.alertas.map((a) => (
-                <li key={a.id}>
+                <li
+                  key={a.id}
+                  className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-300 ${
+                    a.feito
+                      ? "bg-emerald-500/10 border-emerald-400/30"
+                      : a.critico
+                      ? "bg-amber-500/10 border-amber-400/30"
+                      : "bg-white/[0.05] border-white/15 hover:bg-white/[0.09]"
+                  }`}
+                >
                   <button
                     onClick={() => alternarAlerta(a.id)}
-                    className={`w-full flex items-start gap-3 p-4 rounded-xl border text-left transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
-                      a.feito ? "bg-emerald-500/10 border-emerald-400/30" : a.critico ? "bg-amber-500/10 border-amber-400/30" : "bg-white/[0.05] border-white/15 hover:bg-white/[0.12]"
+                    aria-pressed={a.feito}
+                    aria-label={a.feito ? "Desmarcar" : "Marcar como concluída"}
+                    className={`shrink-0 w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                      a.feito ? "bg-emerald-400 border-emerald-400" : "border-white/35 hover:border-white/70"
                     }`}
                   >
-                    <span className={`shrink-0 w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center transition-all ${
-                      a.feito ? "bg-emerald-400 border-emerald-400" : "border-white/35"
-                    }`}>
-                      {a.feito && <Check size={13} className="text-slate-900" strokeWidth={3.5} />}
-                    </span>
-                    <span className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-white/35" : "text-white/85"}`}>
-                      {a.texto}
-                    </span>
-                    {a.critico && !a.feito && <AlertTriangle size={15} className="shrink-0 mt-0.5 text-amber-300" />}
+                    {a.feito && <Check size={13} className="text-slate-900" strokeWidth={3.5} />}
+                  </button>
+
+                  <div className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-white/35" : "text-white/85"}`}>
+                    <Editavel valor={a.texto} multiline onChange={(v) => atualizarAlerta(a.id, "texto", v)} />
+                  </div>
+
+                  <button
+                    onClick={() => atualizarAlerta(a.id, "critico", !a.critico)}
+                    aria-pressed={a.critico}
+                    aria-label={a.critico ? "Remover marcação de crítica" : "Marcar como crítica"}
+                    title={a.critico ? "Crítica" : "Marcar como crítica"}
+                    className={`shrink-0 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-amber-300/70 ${
+                      a.critico
+                        ? "text-amber-300 hover:bg-amber-500/15"
+                        : "text-white/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-amber-300 hover:bg-amber-500/15"
+                    }`}
+                  >
+                    <AlertTriangle size={15} />
+                  </button>
+
+                  <button
+                    onClick={() => removerAlerta(a.id)}
+                    aria-label="Excluir pendência"
+                    className="shrink-0 p-1.5 rounded-lg text-white/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                  >
+                    <Trash2 size={15} />
                   </button>
                 </li>
               ))}
             </ul>
+
+            <button
+              onClick={adicionarAlerta}
+              className="mt-4 flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+            >
+              <Plus size={15} /> Adicionar pendência
+            </button>
           </div>
         )}
 
