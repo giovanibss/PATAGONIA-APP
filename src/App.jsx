@@ -110,6 +110,17 @@ const ROTEIRO_INICIAL = [
 const ESTADO_INICIAL = { roteiro: ROTEIRO_INICIAL, alertas: ALERTAS_INICIAIS, orcamento: ORCAMENTO_ALVO };
 const CHAVE = "patagonia-dez-2026";
 
+/* Fundos cênicos em rotação. Troque por fotos suas colocando os arquivos
+   em public/fundos/ e usando caminhos como "/fundos/fitzroy.jpg". */
+const FUNDOS = [
+  "https://images.unsplash.com/photo-1531572753322-ad063cecc140?auto=format&fit=crop&w=2400&q=80",
+  "https://images.unsplash.com/photo-1520769945061-0a448c463865?auto=format&fit=crop&w=2400&q=80",
+  "https://images.unsplash.com/photo-1476610182048-b716b8518aae?auto=format&fit=crop&w=2400&q=80",
+  "https://images.unsplash.com/photo-1478827387698-1527781a4887?auto=format&fit=crop&w=2400&q=80",
+];
+
+const INTERVALO_FUNDO = 12000;
+
 /* ─────────────────────────  CAMPO EDITÁVEL  ───────────────────────── */
 
 function Editavel({ valor, onChange, className = "", numero = false, prefixo = "", multiline = false }) {
@@ -165,6 +176,14 @@ export default function App() {
   const [carregado, setCarregado] = useState(false);
   const [ativo, setAtivo] = useState(0);
   const [aba, setAba] = useState("roteiro");
+  const [fundo, setFundo] = useState(0);
+
+  useEffect(() => {
+    const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduzir) return;
+    const t = setInterval(() => setFundo((i) => (i + 1) % FUNDOS.length), INTERVALO_FUNDO);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     try {
@@ -211,11 +230,15 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen w-full font-sans text-white overflow-x-hidden">
-      {/* Fundo cênico */}
-      <div
-        className="fixed inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('https://images.unsplash.com/photo-1531572753322-ad063cecc140?auto=format&fit=crop&w=2400&q=80')" }}
-      />
+      {/* Fundos cênicos em crossfade */}
+      {FUNDOS.map((url, i) => (
+        <div
+          key={url}
+          aria-hidden="true"
+          className="fixed inset-0 bg-cover bg-center transition-opacity duration-[2500ms] ease-in-out"
+          style={{ backgroundImage: `url('${url}')`, opacity: i === fundo ? 1 : 0 }}
+        />
+      ))}
       <div className="fixed inset-0 bg-gradient-to-b from-slate-950/80 via-slate-900/70 to-slate-950/90" />
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
