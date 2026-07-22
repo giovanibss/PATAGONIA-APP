@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 /* Credenciais vêm das variáveis de ambiente (.env.local no seu PC,
    Environment Variables no Vercel). Sem elas, o app roda offline
    usando apenas o localStorage. */
-const URL = import.meta.env.VITE_SUPABASE_URL;
-const CHAVE = import.meta.env.VITE_SUPABASE_KEY;
+const URL = "https://peznylswpogypvnhbqlc.supabase.co";
+const CHAVE = "sb_publishable_26Mutfbq-7lE7rKDDCjxwg_OYculaSp";
 
 /* Identificador do roteiro. Todos os aparelhos que usarem o mesmo
    valor compartilham os mesmos dados. */
