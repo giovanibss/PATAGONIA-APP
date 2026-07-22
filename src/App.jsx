@@ -19,11 +19,32 @@ const ALERTAS_INICIAIS = [
   { id: "a7", texto: "Confirmar as 2 noites seguidas em Puerto Natales (dias 8 e 9)", critico: false, feito: false },
 ];
 
-const HOSPEDAGENS = [
-  { base: "El Calafate", noites: "Dias 1–2, 9–11", eco: "Kau Kaleshen · US$ 80–100", meio: "Mirador del Lago · US$ 130–150", top: "Xelena Hotel & Suites · US$ 200–250" },
-  { base: "El Chaltén", noites: "Dias 3–5", eco: "Vientos del Sur Aparts · US$ 90–110", meio: "Hostería Senderos · US$ 150–170", top: "Destino Sur Hotel & Spa · US$ 190–220" },
-  { base: "Torres del Paine", noites: "Dias 6–7", eco: "Reservado por você", meio: "—", top: "—" },
-  { base: "Puerto Natales", noites: "Dias 8–9", eco: "Pire Mapu Cottage · US$ 80–100", meio: "Natalino Hotel · US$ 130–150", top: "Simple Patagonia · US$ 200–240" },
+/* Cotações de referência: quanto vale 1 unidade da moeda em US$.
+   Editáveis no app — confira o câmbio do dia antes de confiar nos números. */
+const CAMBIO_PADRAO = { USD: 1, BRL: 0.185, ARS: 0.00068, CLP: 0.00110 };
+
+const MOEDAS = {
+  USD: { rot: "US$", nome: "Dólar" },
+  BRL: { rot: "R$", nome: "Real" },
+  ARS: { rot: "AR$", nome: "Peso argentino" },
+  CLP: { rot: "CLP$", nome: "Peso chileno" },
+};
+
+/* modo "diaria": total = diaria x noites + taxas | modo "fechado": total = valorFechado */
+const hosp = (id, nome) => ({
+  id, nome, escolhido: null,
+  slots: [
+    { id: `${id}-s1`, hotel: "", modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0 },
+    { id: `${id}-s2`, hotel: "", modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0 },
+    { id: `${id}-s3`, hotel: "", modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0 },
+  ],
+});
+
+const HOSPEDAGENS_INICIAIS = [
+  { ...hosp("h1", "El Calafate"), noites: "Dias 1–2, 9–11" },
+  { ...hosp("h2", "El Chaltén"), noites: "Dias 3–5" },
+  { ...hosp("h3", "Torres del Paine"), noites: "Dias 6–7" },
+  { ...hosp("h4", "Puerto Natales"), noites: "Dias 8–9" },
 ];
 
 const ic = { carro: Car, barco: Ship, trilha: Footprints, comida: Utensils, ponto: MapPin };
@@ -107,7 +128,13 @@ const ROTEIRO_INICIAL = [
   ]},
 ];
 
-const ESTADO_INICIAL = { roteiro: ROTEIRO_INICIAL, alertas: ALERTAS_INICIAIS, orcamento: ORCAMENTO_ALVO };
+const ESTADO_INICIAL = {
+  roteiro: ROTEIRO_INICIAL,
+  alertas: ALERTAS_INICIAIS,
+  orcamento: ORCAMENTO_ALVO,
+  hospedagens: HOSPEDAGENS_INICIAIS,
+  cambio: CAMBIO_PADRAO,
+};
 const CHAVE = "patagonia-dez-2026";
 
 /* Fundos cênicos em rotação. Troque por fotos suas colocando os arquivos
@@ -120,6 +147,25 @@ const FUNDOS = [
 ];
 
 const INTERVALO_FUNDO = 12000;
+
+/* ─────────────────────────  CONVERSÃO  ───────────────────────── */
+
+/* Total do slot na moeda original */
+function totalLocal(slot) {
+  const n = (v) => Number(v) || 0;
+  return slot.modo === "fechado"
+    ? n(slot.fechado)
+    : n(slot.diaria) * n(slot.noites) + n(slot.taxas);
+}
+
+/* Total do slot convertido para US$ */
+function emUSD(slot, cambio) {
+  const taxa = Number(cambio?.[slot.moeda]);
+  return totalLocal(slot) * (Number.isFinite(taxa) ? taxa : 0);
+}
+
+const fmt = (v, casas = 0) =>
+  v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
 /* ─────────────────────────  CAMPO EDITÁVEL  ───────────────────────── */
 
@@ -198,7 +244,20 @@ export default function App() {
     try { window.localStorage.setItem(CHAVE, JSON.stringify(estado)); } catch (e) { /* sem persistência */ }
   }, [estado, carregado]);
 
-  const total = useMemo(() => estado.roteiro.reduce((s, d) => s + (Number(d.custo) || 0), 0), [estado.roteiro]);
+  const totalRoteiro = useMemo(
+    () => estado.roteiro.reduce((s, d) => s + (Number(d.custo) || 0), 0),
+    [estado.roteiro]
+  );
+
+  const totalHosp = useMemo(
+    () => (estado.hospedagens || []).reduce((s, b) => {
+      const slot = b.slots.find((x) => x.id === b.escolhido);
+      return s + (slot ? emUSD(slot, estado.cambio) : 0);
+    }, 0),
+    [estado.hospedagens, estado.cambio]
+  );
+
+  const total = totalRoteiro + totalHosp;
   const pct = Math.min(100, (total / (estado.orcamento || 1)) * 100);
   const restante = estado.orcamento - total;
   const feitos = estado.alertas.filter((a) => a.feito).length;
@@ -222,8 +281,19 @@ export default function App() {
   const alternarAlerta = (id) =>
     setEstado((s) => ({ ...s, alertas: s.alertas.map((a) => (a.id === id ? { ...a, feito: !a.feito } : a)) }));
 
+  const atualizarSlot = (baseId, slotId, campo, valor) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
+      : { ...b, slots: b.slots.map((sl) => (sl.id === slotId ? { ...sl, [campo]: valor } : sl)) }) }));
+
+  const escolherSlot = (baseId, slotId) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
+      : { ...b, escolhido: b.escolhido === slotId ? null : slotId }) }));
+
+  const atualizarCambio = (moeda, valor) =>
+    setEstado((s) => ({ ...s, cambio: { ...s.cambio, [moeda]: valor } }));
+
   const restaurar = () => {
-    if (window.confirm("Restaurar o roteiro original? Suas edições serão perdidas.")) setEstado(ESTADO_INICIAL);
+    if (window.confirm("Restaurar tudo ao estado original? Roteiro, hospedagens e checklist serão zerados.")) setEstado(ESTADO_INICIAL);
   };
 
   const vidro = "backdrop-blur-2xl bg-white/[0.07] border border-white/15 shadow-[0_8px_40px_rgba(0,0,0,0.45)]";
@@ -255,9 +325,9 @@ export default function App() {
         {/* Resumo */}
         <div className={`${vidro} rounded-2xl p-5 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4`}>
           {[
-            { rot: "Total estimado", val: `US$ ${total.toLocaleString("pt-BR")}` },
+            { rot: "Total estimado", val: `US$ ${fmt(total)}` },
             { rot: "Orçamento", val: <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /> },
-            { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${Math.abs(restante).toLocaleString("pt-BR")}`, cor: restante >= 0 ? "text-emerald-300" : "text-rose-300" },
+            { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-emerald-300" : "text-rose-300" },
             { rot: "Pendências", val: `${feitos}/${estado.alertas.length}`, cor: feitos === estado.alertas.length ? "text-emerald-300" : "text-amber-300" },
           ].map((k, i) => (
             <div key={i}>
@@ -422,12 +492,27 @@ export default function App() {
                 );
               })}
             </ul>
-            <div className="mt-6 pt-5 border-t border-white/15 flex items-baseline justify-between">
-              <span className="text-sm uppercase tracking-widest text-white/50">Total</span>
-              <span className="text-3xl font-black tabular-nums">US$ {total.toLocaleString("pt-BR")}</span>
+            <div className="mt-6 pt-5 border-t border-white/15 space-y-2">
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="text-white/50">Passeios e refeições</span>
+                <span className="tabular-nums font-semibold">US$ {fmt(totalRoteiro)}</span>
+              </div>
+              <div className="flex items-baseline justify-between text-sm">
+                <button
+                  onClick={() => setAba("hotel")}
+                  className="text-white/50 hover:text-cyan-300 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded px-1 -mx-1"
+                >
+                  Hospedagem →
+                </button>
+                <span className="tabular-nums font-semibold">US$ {fmt(totalHosp)}</span>
+              </div>
+              <div className="flex items-baseline justify-between pt-3 border-t border-white/10">
+                <span className="text-sm uppercase tracking-widest text-white/50">Total</span>
+                <span className="text-3xl font-black tabular-nums">US$ {fmt(total)}</span>
+              </div>
             </div>
             <p className="mt-3 text-xs text-white/40 leading-relaxed">
-              Não inclui as diárias das cidades nem as passagens aéreas. Somando as 2 noites no hotel do parque, a estimativa fecha entre US$ 4.500 e 4.700.
+              Não inclui as passagens aéreas. A hospedagem soma apenas as opções marcadas como escolhidas.
             </p>
             <button onClick={restaurar} className="mt-5 flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded px-1">
               <RotateCcw size={12} /> Restaurar roteiro original
@@ -468,22 +553,145 @@ export default function App() {
         {/* HOSPEDAGEM */}
         {aba === "hotel" && (
           <div className="space-y-3">
-            {HOSPEDAGENS.map((h) => (
-              <div key={h.base} className={`${vidro} rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1`}>
-                <div className="flex items-baseline justify-between mb-4">
-                  <h3 className="text-lg font-bold">{h.base}</h3>
-                  <span className="text-[11px] uppercase tracking-widest text-white/45">{h.noites}</span>
-                </div>
-                <div className="grid sm:grid-cols-3 gap-3">
-                  {[["Econômica", h.eco], ["Custo-benefício", h.meio], ["Refinada", h.top]].map(([rot, val]) => (
-                    <div key={rot} className="rounded-xl bg-white/[0.05] border border-white/10 p-3">
-                      <div className="text-[10px] uppercase tracking-widest text-cyan-300/70 mb-1.5">{rot}</div>
-                      <div className="text-sm text-white/85 leading-snug">{val}</div>
+            <div className={`${vidro} rounded-2xl p-5`}>
+              <h2 className="text-xl font-bold mb-1">Hospedagem</h2>
+              <p className="text-sm text-white/50">
+                Preencha até três opções por base e marque a escolhida — só ela entra no total da viagem.
+              </p>
+            </div>
+
+            {estado.hospedagens.map((b) => {
+              const escolhido = b.slots.find((s) => s.id === b.escolhido);
+              return (
+                <div key={b.id} className={`${vidro} rounded-2xl p-5`}>
+                  <div className="flex items-baseline justify-between mb-4 gap-3">
+                    <h3 className="text-lg font-bold">{b.nome}</h3>
+                    <div className="text-right">
+                      <span className="text-[11px] uppercase tracking-widest text-white/45">{b.noites}</span>
+                      {escolhido && (
+                        <div className="text-sm font-bold text-emerald-300 tabular-nums">
+                          US$ {fmt(emUSD(escolhido, estado.cambio))}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="grid lg:grid-cols-3 gap-3">
+                    {b.slots.map((sl, i) => {
+                      const ativo = b.escolhido === sl.id;
+                      const local = totalLocal(sl);
+                      const usd = emUSD(sl, estado.cambio);
+                      return (
+                        <div
+                          key={sl.id}
+                          className={`rounded-xl border p-3.5 transition-all duration-300 ${
+                            ativo ? "bg-emerald-500/10 border-emerald-400/40" : "bg-white/[0.05] border-white/10 hover:bg-white/[0.09]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] uppercase tracking-widest text-cyan-300/70">Opção {i + 1}</span>
+                            <button
+                              onClick={() => escolherSlot(b.id, sl.id)}
+                              aria-pressed={ativo}
+                              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                                ativo ? "bg-emerald-400 text-slate-900" : "bg-white/10 text-white/50 hover:bg-white/20"
+                              }`}
+                            >
+                              {ativo && <Check size={11} strokeWidth={3.5} />}
+                              {ativo ? "Escolhido" : "Escolher"}
+                            </button>
+                          </div>
+
+                          <div className="text-[15px] font-semibold mb-3 min-h-[24px]">
+                            <Editavel
+                              valor={sl.hotel || "Nome do hotel"}
+                              onChange={(v) => atualizarSlot(b.id, sl.id, "hotel", v)}
+                              className={sl.hotel ? "" : "text-white/30 italic"}
+                            />
+                          </div>
+
+                          <div className="flex gap-1.5 mb-3">
+                            {["diaria", "fechado"].map((m) => (
+                              <button
+                                key={m}
+                                onClick={() => atualizarSlot(b.id, sl.id, "modo", m)}
+                                className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                                  sl.modo === m ? "bg-white text-slate-900" : "bg-white/10 text-white/50 hover:bg-white/20"
+                                }`}
+                              >
+                                {m === "diaria" ? "Diária" : "Fechado"}
+                              </button>
+                            ))}
+                            <select
+                              value={sl.moeda}
+                              onChange={(e) => atualizarSlot(b.id, sl.id, "moeda", e.target.value)}
+                              aria-label="Moeda"
+                              className="text-[10px] font-bold uppercase tracking-wider py-1.5 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                            >
+                              {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1.5 text-sm">
+                            {sl.modo === "diaria" ? (
+                              <>
+                                {[["Diária", "diaria"], ["Noites", "noites"], ["Taxas", "taxas"]].map(([rot, campo]) => (
+                                  <div key={campo} className="flex items-center justify-between gap-2">
+                                    <span className="text-white/45 text-xs">{rot}</span>
+                                    <span className="tabular-nums font-semibold text-right">
+                                      <Editavel valor={sl[campo]} numero onChange={(v) => atualizarSlot(b.id, sl.id, campo, v)} />
+                                    </span>
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-white/45 text-xs">Valor total</span>
+                                <span className="tabular-nums font-semibold text-right">
+                                  <Editavel valor={sl.fechado} numero onChange={(v) => atualizarSlot(b.id, sl.id, "fechado", v)} />
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-3 pt-2.5 border-t border-white/10">
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xs text-white/45">{MOEDAS[sl.moeda].rot} {fmt(local, sl.moeda === "USD" ? 0 : 0)}</span>
+                              <span className="text-base font-bold text-emerald-300 tabular-nums">US$ {fmt(usd)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+              );
+            })}
+
+            {/* Câmbio */}
+            <div className={`${vidro} rounded-2xl p-5`}>
+              <h3 className="text-base font-bold mb-1">Câmbio</h3>
+              <p className="text-xs text-white/45 mb-4 leading-relaxed">
+                Quanto vale 1 unidade em dólar. Valores de referência — confira a cotação do dia e ajuste aqui.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {Object.entries(MOEDAS).map(([cod, m]) => (
+                  <div key={cod} className="rounded-xl bg-white/[0.05] border border-white/10 p-3">
+                    <div className="text-[10px] uppercase tracking-widest text-cyan-300/70 mb-1">{cod} · {m.nome}</div>
+                    {cod === "USD" ? (
+                      <div className="text-sm font-semibold text-white/40">1,00 (base)</div>
+                    ) : (
+                      <div className="text-sm font-semibold tabular-nums">
+                        <Editavel valor={estado.cambio[cod]} numero onChange={(v) => atualizarCambio(cod, v)} />
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+              <p className="mt-4 text-xs text-white/40">
+                Total em hospedagem: <span className="font-bold text-emerald-300">US$ {fmt(totalHosp)}</span>
+              </p>
+            </div>
           </div>
         )}
 
