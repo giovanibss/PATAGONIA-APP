@@ -185,20 +185,45 @@ const ESTADO_INICIAL = {
   hospedagens: HOSPEDAGENS_INICIAIS,
   cambio: CAMBIO_PADRAO,
   iof: IOF_PADRAO,
+  custos: null, // preenchido na migração
 };
 
-/* Converte dados salvos no formato antigo (custo solto por dia, hospedagem
-   sem status) para a estrutura nova. Roda a cada carga — é idempotente. */
+/* Converte dados salvos em formatos antigos. Roda a cada carga — é idempotente. */
 function migrar(bruto) {
   const e = { ...ESTADO_INICIAL, ...(bruto || {}) };
 
+  /* formato v1: custo numérico solto por dia */
   e.roteiro = (e.roteiro || []).map((d) => {
-    if (d.lanc) return d;
-    return { ...d, lanc: { ...lanc(Number(d.custo) || 0) } };
+    if (d.lanc || typeof d.custo !== "number") return d;
+    return { ...d, lanc: { ...lanc(d.custo) } };
   });
+
+  /* formato v3: fichas de custo independentes. Se ainda não existem,
+     converte o lançamento de cada dia numa ficha atrelada àquele dia. */
+  if (!Array.isArray(e.custos)) {
+    e.custos = [];
+    (e.roteiro || []).forEach((d) => {
+      const l = d.lanc;
+      if (l && (Number(l.valor) || 0) > 0) {
+        e.custos.push({
+          id: `c-${d.id}`,
+          nome: "Custos do dia",
+          diaId: d.id,
+          valor: Number(l.valor) || 0,
+          moeda: l.moeda || "USD",
+          status: STATUS[l.status] ? l.status : "aberto",
+          pagamento: PAGAMENTOS[l.pagamento] ? l.pagamento : "credito",
+          iofIsento: Boolean(l.iofIsento),
+        });
+      }
+    });
+  }
+  /* o lanc do dia deixa de existir para não contar em dobro */
+  e.roteiro = (e.roteiro || []).map(({ lanc: _l, custo: _c, ...d }) => d);
 
   e.hospedagens = (e.hospedagens || []).map((b) => ({
     ...b,
+    diasIds: Array.isArray(b.diasIds) ? b.diasIds : [],
     slots: (b.slots || []).map((s) => ({
       ...s,
       lanc: {
@@ -357,7 +382,7 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
 /* ─────────────────────────  APP  ───────────────────────── */
 
 export default function App() {
-  const [estado, setEstado] = useState(ESTADO_INICIAL);
+  const [estado, setEstado] = useState(() => migrar(ESTADO_INICIAL));
   const [carregado, setCarregado] = useState(false);
   const [ativo, setAtivo] = useState(0);
   const [aba, setAba] = useState("roteiro");
@@ -443,12 +468,16 @@ export default function App() {
     return () => clearTimeout(t);
   }, [estado, carregado]);
 
-  /* Junta todos os custos — dias e hospedagens — numa lista só */
+  /* Junta todos os custos — fichas e hospedagens — numa lista só */
   const lancamentos = useMemo(() => {
     const out = [];
-    (estado.roteiro || []).forEach((d) => {
-      if (!d.lanc) return;
-      out.push({ chave: `dia-${d.id}`, rotulo: `Dia ${d.n} · ${d.titulo}`, l: d.lanc, origem: "roteiro", ref: d });
+    (estado.custos || []).forEach((c) => {
+      const d = (estado.roteiro || []).find((x) => x.id === c.diaId);
+      out.push({
+        chave: `custo-${c.id}`,
+        rotulo: `${d ? `Dia ${d.n}` : "Sem dia"} · ${c.nome}`,
+        l: c, origem: "custo", ref: c,
+      });
     });
     (estado.hospedagens || []).forEach((b) => {
       const slot = b.slots.find((s) => s.id === b.escolhido);
@@ -457,7 +486,28 @@ export default function App() {
       out.push({ chave: `hosp-${b.id}`, rotulo: `${b.nome} · ${slot.hotel || "hotel"}`, l, origem: "hospedagem", ref: b });
     });
     return out;
-  }, [estado.roteiro, estado.hospedagens]);
+  }, [estado.custos, estado.roteiro, estado.hospedagens]);
+
+  /* Total em US$ de cada dia, somando as fichas atreladas a ele */
+  const custoPorDia = useMemo(() => {
+    const m = {};
+    (estado.custos || []).forEach((c) => {
+      if (!c.diaId) return;
+      m[c.diaId] = (m[c.diaId] || 0) + lancEmUSD(c, estado.cambio, estado.iof);
+    });
+    return m;
+  }, [estado.custos, estado.cambio, estado.iof]);
+
+  /* Hotel escolhido de cada dia, para exibir no roteiro */
+  const hotelPorDia = useMemo(() => {
+    const m = {};
+    (estado.hospedagens || []).forEach((b) => {
+      const slot = b.slots.find((s) => s.id === b.escolhido);
+      if (!slot || !slot.hotel) return;
+      (b.diasIds || []).forEach((dId) => { m[dId] = slot.hotel; });
+    });
+    return m;
+  }, [estado.hospedagens]);
 
   const fin = useMemo(() => {
     const z = { pago: 0, faturar: 0, chegada: 0, aberto: 0, iof: 0, total: 0 };
@@ -474,8 +524,8 @@ export default function App() {
   }, [lancamentos, estado.cambio, estado.iof]);
 
   const totalRoteiro = useMemo(
-    () => (estado.roteiro || []).reduce((s, d) => s + lancEmUSD(d.lanc, estado.cambio, estado.iof), 0),
-    [estado.roteiro, estado.cambio, estado.iof]
+    () => (estado.custos || []).reduce((s, c) => s + lancEmUSD(c, estado.cambio, estado.iof), 0),
+    [estado.custos, estado.cambio, estado.iof]
   );
 
   const totalHosp = useMemo(
@@ -532,9 +582,23 @@ export default function App() {
   const atualizarCambio = (moeda, valor) =>
     setEstado((s) => ({ ...s, cambio: { ...s.cambio, [moeda]: valor } }));
 
-  const atualizarLancDia = (diaId, campo, valor) =>
-    setEstado((s) => ({ ...s, roteiro: s.roteiro.map((d) => d.id !== diaId ? d
-      : { ...d, lanc: { ...(d.lanc || lanc()), [campo]: valor } }) }));
+  const atualizarCusto = (id, campo, valor) =>
+    setEstado((s) => ({ ...s, custos: s.custos.map((c) => (c.id === id ? { ...c, [campo]: valor } : c)) }));
+
+  const removerCusto = (id) =>
+    setEstado((s) => ({ ...s, custos: s.custos.filter((c) => c.id !== id) }));
+
+  const adicionarCusto = (diaId = null) =>
+    setEstado((s) => ({ ...s, custos: [...(s.custos || []), {
+      id: `c-${Date.now()}`, nome: "Novo custo", diaId: diaId || s.roteiro[0]?.id || null,
+      valor: 0, moeda: "USD", status: "aberto", pagamento: "credito", iofIsento: false,
+    }] }));
+
+  const alternarDiaBase = (baseId, diaId) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
+      : { ...b, diasIds: (b.diasIds || []).includes(diaId)
+          ? b.diasIds.filter((x) => x !== diaId)
+          : [...(b.diasIds || []), diaId] }) }));
 
   const atualizarLancSlot = (baseId, slotId, campo, valor) =>
     setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
@@ -542,7 +606,7 @@ export default function App() {
           : { ...sl, lanc: { ...(sl.lanc || {}), [campo]: valor } }) }) }));
 
   const restaurar = () => {
-    if (window.confirm("Restaurar tudo ao estado original? Roteiro, hospedagens e checklist serão zerados.")) setEstado(ESTADO_INICIAL);
+    if (window.confirm("Restaurar tudo ao estado original? Roteiro, custos, hospedagens e checklist serão zerados.")) setEstado(migrar(ESTADO_INICIAL));
   };
 
   const vidro = "backdrop-blur-2xl bg-white/[0.07] border border-white/15 shadow-[0_8px_40px_rgba(0,0,0,0.45)]";
@@ -666,36 +730,25 @@ export default function App() {
                 <div className="flex items-center gap-2 text-cyan-300 text-[11px] font-bold uppercase tracking-[0.2em]">
                   <MapPin size={13} /> <Editavel valor={dia.base} onChange={(v) => atualizarDia(dia.id, "base", v)} />
                 </div>
-                <div className="text-right shrink-0">
+                <button
+                  onClick={() => setAba("custos")}
+                  title="Editar na aba Custos"
+                  className="text-right shrink-0 rounded-lg px-2 py-1 -mr-2 hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                >
                   <div className="text-[10px] uppercase tracking-widest text-white/45">Custo do dia</div>
-                  <div className="flex items-center gap-1.5 justify-end">
-                    <div className="text-xl font-bold text-emerald-300">
-                      <Editavel valor={dia.lanc?.valor ?? 0} numero onChange={(v) => atualizarLancDia(dia.id, "valor", v)} />
-                    </div>
-                    <select
-                      value={dia.lanc?.moeda || "USD"}
-                      onChange={(e) => atualizarLancDia(dia.id, "moeda", e.target.value)}
-                      aria-label="Moeda do dia"
-                      className="text-[10px] font-bold py-1 px-1 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
-                    >
-                      {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                  <div className="text-xl font-bold text-emerald-300 tabular-nums">
+                    US$ {fmt(custoPorDia[dia.id] || 0)}
                   </div>
-                  {dia.lanc?.moeda !== "USD" && (
-                    <div className="text-[11px] text-white/40 tabular-nums mt-0.5">
-                      ≈ US$ {fmt(lancEmUSD(dia.lanc, estado.cambio, estado.iof))}
-                    </div>
-                  )}
-                </div>
+                  <div className="text-[10px] text-white/35">editar em Custos →</div>
+                </button>
               </div>
 
-              <div className="mb-4 pb-4 border-b border-white/10">
-                <Pagamento
-                  l={dia.lanc}
-                  aliquota={estado.iof}
-                  onChange={(c, v) => atualizarLancDia(dia.id, c, v)}
-                />
-              </div>
+              {hotelPorDia[dia.id] && (
+                <div className="flex items-center gap-2 mb-3 text-sm text-white/70">
+                  <BedDouble size={14} className="text-cyan-300/70 shrink-0" />
+                  <span className="truncate">{hotelPorDia[dia.id]}</span>
+                </div>
+              )}
 
               <h2 className="text-2xl font-bold mb-1 leading-snug">
                 <Editavel valor={dia.titulo} multiline onChange={(v) => atualizarDia(dia.id, "titulo", v)} />
@@ -833,22 +886,100 @@ export default function App() {
               </div>
             </div>
 
-            {/* Lista de lançamentos */}
+            {/* Fichas de custo */}
             <div className={`${vidro} rounded-2xl p-6`}>
-              <h3 className="text-base font-bold mb-1">Lançamentos</h3>
+              <div className="flex items-center justify-between gap-3 mb-1">
+                <h3 className="text-base font-bold">Fichas de custo</h3>
+                <button
+                  onClick={() => adicionarCusto(estado.roteiro[ativo]?.id)}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-cyan-300 hover:text-cyan-200 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                >
+                  <Plus size={14} /> Nova ficha
+                </button>
+              </div>
               <p className="text-sm text-white/50 mb-5">
-                Cada dia e cada hotel escolhido. Clique para abrir e ajustar.
+                Cada gasto é uma ficha atrelada a um dia. Os totais por dia aparecem no Roteiro.
+              </p>
+
+              {(estado.custos || []).length === 0 && (
+                <p className="text-sm text-white/30 italic py-4 text-center">Nenhuma ficha ainda.</p>
+              )}
+
+              <ul className="space-y-2.5">
+                {(estado.custos || []).map((c) => {
+                  const st = STATUS[c.status] || STATUS.aberto;
+                  const cor = CORES[st.cor];
+                  const usd = lancEmUSD(c, estado.cambio, estado.iof);
+                  return (
+                    <li key={c.id} className={`group rounded-xl border p-4 ${cor.bg} ${cor.bd}`}>
+                      <div className="flex items-start gap-3 mb-3">
+                        <span className={`shrink-0 w-1.5 h-9 rounded-full mt-0.5 ${cor.solid}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[15px] font-semibold">
+                            <Editavel valor={c.nome} onChange={(v) => atualizarCusto(c.id, "nome", v)} />
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <select
+                              value={c.diaId || ""}
+                              onChange={(e) => atualizarCusto(c.id, "diaId", e.target.value || null)}
+                              aria-label="Dia da viagem"
+                              className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                            >
+                              <option value="">Sem dia</option>
+                              {estado.roteiro.map((d) => (
+                                <option key={d.id} value={d.id}>Dia {d.n} · {d.data}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={c.moeda}
+                              onChange={(e) => atualizarCusto(c.id, "moeda", e.target.value)}
+                              aria-label="Moeda"
+                              className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                            >
+                              {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                            </select>
+                            <span className="text-sm font-semibold tabular-nums">
+                              <Editavel valor={c.valor} numero onChange={(v) => atualizarCusto(c.id, "valor", v)} />
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-base font-bold text-emerald-300 tabular-nums">US$ {fmt(usd)}</div>
+                          <button
+                            onClick={() => removerCusto(c.id)}
+                            aria-label="Excluir ficha"
+                            className="mt-1 p-1.5 rounded-lg text-white/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <Pagamento
+                        l={c}
+                        aliquota={estado.iof}
+                        compacto
+                        onChange={(campo, v) => atualizarCusto(c.id, campo, v)}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {/* Hospedagens no consolidado */}
+            <div className={`${vidro} rounded-2xl p-6`}>
+              <h3 className="text-base font-bold mb-1">Hospedagem no total</h3>
+              <p className="text-sm text-white/50 mb-4">
+                Os hotéis escolhidos entram no consolidado. Edite os valores na aba Hospedagem.
               </p>
               <ul className="space-y-1.5">
-                {lancamentos.map((x) => {
+                {lancamentos.filter((x) => x.origem === "hospedagem").map((x) => {
                   const st = STATUS[x.l.status] || STATUS.aberto;
                   const c = CORES[st.cor];
-                  const usd = lancEmUSD(x.l, estado.cambio, estado.iof);
-                  const i = estado.roteiro.findIndex((d) => `dia-${d.id}` === x.chave);
                   return (
                     <li key={x.chave}>
                       <button
-                        onClick={() => { if (i >= 0) { setAba("roteiro"); setAtivo(i); } else setAba("hotel"); }}
+                        onClick={() => setAba("hotel")}
                         className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 hover:border-white/25 hover:bg-white/[0.06] transition-all text-left focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
                       >
                         <span className={`shrink-0 w-1.5 h-8 rounded-full ${c.solid}`} />
@@ -859,7 +990,7 @@ export default function App() {
                           </span>
                         </span>
                         <span className="shrink-0 text-sm font-bold tabular-nums text-white/90">
-                          US$ {fmt(usd)}
+                          US$ {fmt(lancEmUSD(x.l, estado.cambio, estado.iof))}
                         </span>
                       </button>
                     </li>
@@ -977,6 +1108,30 @@ export default function App() {
                           US$ {fmt(lancEmUSD({ ...(escolhido.lanc || {}), moeda: escolhido.moeda, valor: totalLocal(escolhido) }, estado.cambio, estado.iof))}
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <div className="text-[10px] uppercase tracking-widest text-white/45 mb-1.5">
+                      Noites desta base (aparece no Roteiro)
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {estado.roteiro.map((d) => {
+                        const on = (b.diasIds || []).includes(d.id);
+                        return (
+                          <button
+                            key={d.id}
+                            onClick={() => alternarDiaBase(b.id, d.id)}
+                            aria-pressed={on}
+                            title={`Dia ${d.n} · ${d.data}`}
+                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                              on ? "bg-cyan-400 text-slate-900" : "bg-white/[0.07] text-white/45 hover:bg-white/15"
+                            }`}
+                          >
+                            {d.n}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
