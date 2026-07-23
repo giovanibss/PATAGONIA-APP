@@ -235,6 +235,7 @@ function migrar(bruto) {
     })),
   }));
 
+  e.cambio = { ...CAMBIO_PADRAO, ...(e.cambio || {}) };
   if (typeof e.iof !== "number") e.iof = IOF_PADRAO;
   return e;
 }
@@ -264,6 +265,37 @@ function totalLocal(slot) {
 const fmt = (v, casas = 0) =>
   v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
+/* Valores em dólar: mostra centavos quando o número é pequeno,
+   para lançamentos em pesos não aparecerem como "US$ 0". */
+const fmtUSD = (v) => fmt(v, Math.abs(v) > 0 && Math.abs(v) < 100 ? 2 : 0);
+
+/* Interpreta números como um brasileiro digita:
+   "45.000" → 45000 · "45.000,50" → 45000.5 · "1.234.567" → 1234567
+   "45,5" → 45.5 · "45.5" → 45.5 · "0.00068" → 0.00068 */
+function parseNum(texto) {
+  let s = String(texto).trim().replace(/\s/g, "");
+  const temVirgula = s.includes(",");
+  const temPonto = s.includes(".");
+
+  if (temVirgula && temPonto) {
+    /* o separador que aparece por último é o decimal */
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(/,/g, "");
+  } else if (temVirgula) {
+    const partes = s.split(",");
+    s = partes.length > 2 ? partes.join("") : s.replace(",", ".");
+  } else if (temPonto) {
+    const partes = s.split(".");
+    if (partes.length > 2) {
+      s = partes.join(""); /* "1.234.567" */
+    } else if (partes[1]?.length === 3 && partes[0].length >= 1 && partes[0] !== "0") {
+      s = partes.join(""); /* "45.000" no padrão brasileiro é milhar */
+    }
+    /* "45.5", "0.00068" etc. permanecem decimais */
+  }
+  return parseFloat(s) || 0;
+}
+
 /* ─────────────────────────  CAMPO EDITÁVEL  ───────────────────────── */
 
 function Editavel({ valor, onChange, className = "", numero = false, prefixo = "", multiline = false }) {
@@ -276,7 +308,7 @@ function Editavel({ valor, onChange, className = "", numero = false, prefixo = "
 
   const salvar = () => {
     setEditando(false);
-    onChange(numero ? (parseFloat(String(rascunho).replace(",", ".")) || 0) : rascunho);
+    onChange(numero ? parseNum(rascunho) : rascunho);
   };
 
   if (editando) {
@@ -737,7 +769,7 @@ export default function App() {
                 >
                   <div className="text-[10px] uppercase tracking-widest text-white/45">Custo do dia</div>
                   <div className="text-xl font-bold text-emerald-300 tabular-nums">
-                    US$ {fmt(custoPorDia[dia.id] || 0)}
+                    US$ {fmtUSD(custoPorDia[dia.id] || 0)}
                   </div>
                   <div className="text-[10px] text-white/35">editar em Custos →</div>
                 </button>
@@ -888,82 +920,117 @@ export default function App() {
 
             {/* Fichas de custo */}
             <div className={`${vidro} rounded-2xl p-6`}>
-              <div className="flex items-center justify-between gap-3 mb-1">
-                <h3 className="text-base font-bold">Fichas de custo</h3>
-                <button
-                  onClick={() => adicionarCusto(estado.roteiro[ativo]?.id)}
-                  className="flex items-center gap-1.5 text-sm font-semibold text-cyan-300 hover:text-cyan-200 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
-                >
-                  <Plus size={14} /> Nova ficha
-                </button>
-              </div>
+              <h3 className="text-base font-bold mb-1">Fichas de custo</h3>
               <p className="text-sm text-white/50 mb-5">
                 Cada gasto é uma ficha atrelada a um dia. Os totais por dia aparecem no Roteiro.
               </p>
 
               {(estado.custos || []).length === 0 && (
-                <p className="text-sm text-white/30 italic py-4 text-center">Nenhuma ficha ainda.</p>
+                <p className="text-sm text-white/30 italic py-4 text-center">
+                  Nenhuma ficha ainda. Use o botão de um dos dias abaixo para começar.
+                </p>
               )}
 
-              <ul className="space-y-2.5">
-                {(estado.custos || []).map((c) => {
-                  const st = STATUS[c.status] || STATUS.aberto;
-                  const cor = CORES[st.cor];
-                  const usd = lancEmUSD(c, estado.cambio, estado.iof);
+              <div className="space-y-5">
+                {[...estado.roteiro, null].map((d) => {
+                  const fichas = (estado.custos || []).filter((c) => (d ? c.diaId === d.id : !c.diaId || !estado.roteiro.some((x) => x.id === c.diaId)));
+                  if (!d && fichas.length === 0) return null; /* "Sem dia" só aparece se tiver ficha */
+                  const subtotal = fichas.reduce((s, c) => s + lancEmUSD(c, estado.cambio, estado.iof), 0);
                   return (
-                    <li key={c.id} className={`group rounded-xl border p-4 ${cor.bg} ${cor.bd}`}>
-                      <div className="flex items-start gap-3 mb-3">
-                        <span className={`shrink-0 w-1.5 h-9 rounded-full mt-0.5 ${cor.solid}`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[15px] font-semibold">
-                            <Editavel valor={c.nome} onChange={(v) => atualizarCusto(c.id, "nome", v)} />
-                          </div>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <select
-                              value={c.diaId || ""}
-                              onChange={(e) => atualizarCusto(c.id, "diaId", e.target.value || null)}
-                              aria-label="Dia da viagem"
-                              className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
-                            >
-                              <option value="">Sem dia</option>
-                              {estado.roteiro.map((d) => (
-                                <option key={d.id} value={d.id}>Dia {d.n} · {d.data}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={c.moeda}
-                              onChange={(e) => atualizarCusto(c.id, "moeda", e.target.value)}
-                              aria-label="Moeda"
-                              className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
-                            >
-                              {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                            <span className="text-sm font-semibold tabular-nums">
-                              <Editavel valor={c.valor} numero onChange={(v) => atualizarCusto(c.id, "valor", v)} />
-                            </span>
-                          </div>
+                    <section key={d ? d.id : "sem-dia"}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-baseline gap-2 min-w-0">
+                          <span className="text-sm font-black shrink-0">
+                            {d ? `Dia ${d.n}` : "Sem dia"}
+                          </span>
+                          {d && <span className="text-[11px] text-white/40 shrink-0">{d.data}</span>}
+                          {d && <span className="text-[11px] text-white/40 truncate hidden sm:inline">· {d.titulo}</span>}
                         </div>
-                        <div className="text-right shrink-0">
-                          <div className="text-base font-bold text-emerald-300 tabular-nums">US$ {fmt(usd)}</div>
+                        <div className="flex-1 border-t border-white/10" />
+                        {subtotal > 0 && (
+                          <span className="text-xs font-bold text-emerald-300 tabular-nums shrink-0">
+                            US$ {fmtUSD(subtotal)}
+                          </span>
+                        )}
+                        {d && (
                           <button
-                            onClick={() => removerCusto(c.id)}
-                            aria-label="Excluir ficha"
-                            className="mt-1 p-1.5 rounded-lg text-white/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                            onClick={() => adicionarCusto(d.id)}
+                            aria-label={`Nova ficha no dia ${d.n}`}
+                            title="Nova ficha neste dia"
+                            className="shrink-0 p-1.5 rounded-lg text-cyan-300/70 hover:text-cyan-200 hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
                           >
-                            <Trash2 size={14} />
+                            <Plus size={15} />
                           </button>
-                        </div>
+                        )}
                       </div>
-                      <Pagamento
-                        l={c}
-                        aliquota={estado.iof}
-                        compacto
-                        onChange={(campo, v) => atualizarCusto(c.id, campo, v)}
-                      />
-                    </li>
+
+                      {fichas.length === 0 ? (
+                        <p className="text-xs text-white/25 italic pl-1">Sem lançamentos.</p>
+                      ) : (
+                        <ul className="space-y-2.5">
+                          {fichas.map((c) => {
+                            const st = STATUS[c.status] || STATUS.aberto;
+                            const cor = CORES[st.cor];
+                            const usd = lancEmUSD(c, estado.cambio, estado.iof);
+                            return (
+                              <li key={c.id} className={`group rounded-xl border p-4 ${cor.bg} ${cor.bd}`}>
+                                <div className="flex items-start gap-3 mb-3">
+                                  <span className={`shrink-0 w-1.5 h-9 rounded-full mt-0.5 ${cor.solid}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-[15px] font-semibold">
+                                      <Editavel valor={c.nome} onChange={(v) => atualizarCusto(c.id, "nome", v)} />
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                      <select
+                                        value={c.diaId || ""}
+                                        onChange={(e) => atualizarCusto(c.id, "diaId", e.target.value || null)}
+                                        aria-label="Dia da viagem"
+                                        className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                                      >
+                                        <option value="">Sem dia</option>
+                                        {estado.roteiro.map((x) => (
+                                          <option key={x.id} value={x.id}>Dia {x.n} · {x.data}</option>
+                                        ))}
+                                      </select>
+                                      <select
+                                        value={c.moeda}
+                                        onChange={(e) => atualizarCusto(c.id, "moeda", e.target.value)}
+                                        aria-label="Moeda"
+                                        className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                                      >
+                                        {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                                      </select>
+                                      <span className="text-sm font-semibold tabular-nums">
+                                        <Editavel valor={c.valor} numero onChange={(v) => atualizarCusto(c.id, "valor", v)} />
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div className="text-base font-bold text-emerald-300 tabular-nums">US$ {fmtUSD(usd)}</div>
+                                    <button
+                                      onClick={() => removerCusto(c.id)}
+                                      aria-label="Excluir ficha"
+                                      className="mt-1 p-1.5 rounded-lg text-white/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <Pagamento
+                                  l={c}
+                                  aliquota={estado.iof}
+                                  compacto
+                                  onChange={(campo, v) => atualizarCusto(c.id, campo, v)}
+                                />
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </section>
                   );
                 })}
-              </ul>
+              </div>
             </div>
 
             {/* Hospedagens no consolidado */}
@@ -990,7 +1057,7 @@ export default function App() {
                           </span>
                         </span>
                         <span className="shrink-0 text-sm font-bold tabular-nums text-white/90">
-                          US$ {fmt(lancEmUSD(x.l, estado.cambio, estado.iof))}
+                          US$ {fmtUSD(lancEmUSD(x.l, estado.cambio, estado.iof))}
                         </span>
                       </button>
                     </li>
