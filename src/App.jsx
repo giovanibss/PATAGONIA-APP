@@ -136,7 +136,29 @@ const ESTADO_INICIAL = {
   orcamento: ORCAMENTO_ALVO,
   hospedagens: HOSPEDAGENS_INICIAIS,
   cambio: CAMBIO_PADRAO,
+  iof: IOF_PADRAO,
 };
+
+/* Converte dados salvos no formato antigo (custo solto por dia, hospedagem
+   sem status) para a estrutura nova. Roda a cada carga — é idempotente. */
+function migrar(bruto) {
+  const e = { ...ESTADO_INICIAL, ...(bruto || {}) };
+
+  e.roteiro = (e.roteiro || []).map((d) => {
+    if (d.lanc) return d;
+    return { ...d, lanc: { ...lanc(Number(d.custo) || 0) } };
+  });
+
+  e.hospedagens = (e.hospedagens || []).map((b) => ({
+    ...b,
+    slots: (b.slots || []).map((s) =>
+      s.lanc ? s : { ...s, lanc: { status: "aberto", pagamento: "credito", iofIsento: false } }
+    ),
+  }));
+
+  if (typeof e.iof !== "number") e.iof = IOF_PADRAO;
+  return e;
+}
 const CHAVE = "patagonia-dez-2026";
 
 /* Fundos cênicos em rotação. Troque por fotos suas colocando os arquivos
@@ -150,6 +172,54 @@ const FUNDOS = [
 
 const INTERVALO_FUNDO = 12000;
 
+/* ─────────────────────────  FINANCEIRO  ───────────────────────── */
+
+/* IOF sobre compras internacionais no cartão. Fixado em 3,5% desde 2025.
+   Editável porque alguns bancos oferecem isenção ou cashback. */
+const IOF_PADRAO = 3.5;
+
+const STATUS = {
+  pago:      { rot: "Pago",           curto: "Pago",      cor: "emerald", desc: "Fatura já quitada" },
+  faturar:   { rot: "Cai na fatura",  curto: "Fatura",    cor: "amber",   desc: "Reservado, cobrança antes da viagem" },
+  chegada:   { rot: "Pago na chegada",curto: "Chegada",   cor: "sky",     desc: "Reservado, paga no local" },
+  aberto:    { rot: "Não reservado",  curto: "Aberto",    cor: "slate",   desc: "Ainda sem reserva" },
+};
+
+const PAGAMENTOS = {
+  credito: { rot: "Crédito", iof: true },
+  especie: { rot: "Espécie", iof: false },
+  debito:  { rot: "Débito/Global", iof: true },
+};
+
+const CORES = {
+  emerald: { txt: "text-emerald-300", bg: "bg-emerald-500/10", bd: "border-emerald-400/30", solid: "bg-emerald-400" },
+  amber:   { txt: "text-amber-300",   bg: "bg-amber-500/10",   bd: "border-amber-400/30",   solid: "bg-amber-400" },
+  sky:     { txt: "text-sky-300",     bg: "bg-sky-500/10",     bd: "border-sky-400/30",     solid: "bg-sky-400" },
+  slate:   { txt: "text-white/50",    bg: "bg-white/5",        bd: "border-white/15",       solid: "bg-white/40" },
+};
+
+/* Lançamento padrão. Todo custo — de dia ou de hotel — vira um destes. */
+const lanc = (valor = 0) => ({
+  status: "aberto", pagamento: "credito", moeda: "USD", iofIsento: false, valor,
+});
+
+/* IOF incide sobre o valor convertido em reais, mas como o painel trabalha
+   em dólar, o percentual é equivalente em qualquer moeda. */
+function iofDe(l, aliquota) {
+  if (!l) return 0;
+  const meio = PAGAMENTOS[l.pagamento];
+  if (!meio?.iof || l.iofIsento) return 0;
+  return (Number(l.valor) || 0) * ((Number(aliquota) || 0) / 100);
+}
+
+/* Valor cheio do lançamento, já com IOF, convertido para US$ */
+function lancEmUSD(l, cambio, aliquota) {
+  if (!l) return 0;
+  const taxa = Number(cambio?.[l.moeda]);
+  const bruto = (Number(l.valor) || 0) + iofDe(l, aliquota);
+  return bruto * (Number.isFinite(taxa) ? taxa : 0);
+}
+
 /* ─────────────────────────  CONVERSÃO  ───────────────────────── */
 
 /* Total do slot na moeda original */
@@ -158,12 +228,6 @@ function totalLocal(slot) {
   return slot.modo === "fechado"
     ? n(slot.fechado)
     : n(slot.diaria) * n(slot.noites) + n(slot.taxas);
-}
-
-/* Total do slot convertido para US$ */
-function emUSD(slot, cambio) {
-  const taxa = Number(cambio?.[slot.moeda]);
-  return totalLocal(slot) * (Number.isFinite(taxa) ? taxa : 0);
 }
 
 const fmt = (v, casas = 0) =>
@@ -217,6 +281,73 @@ function Editavel({ valor, onChange, className = "", numero = false, prefixo = "
   );
 }
 
+/* ─────────────────────────  CONTROLE DE PAGAMENTO  ───────────────────────── */
+
+function Pagamento({ l, aliquota, onChange, compacto = false }) {
+  const dado = l || lanc();
+  const meio = PAGAMENTOS[dado.pagamento] || PAGAMENTOS.credito;
+  const temIOF = meio.iof && !dado.iofIsento;
+  const iof = iofDe(dado, aliquota);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1">
+        {Object.entries(STATUS).map(([k, st]) => {
+          const on = dado.status === k;
+          const c = CORES[st.cor];
+          return (
+            <button
+              key={k}
+              onClick={() => onChange("status", k)}
+              title={st.desc}
+              aria-pressed={on}
+              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                on ? `${c.bg} ${c.bd} ${c.txt}` : "bg-white/5 border-white/10 text-white/40 hover:bg-white/10"
+              }`}
+            >
+              {compacto ? st.curto : st.rot}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1">
+        {Object.entries(PAGAMENTOS).map(([k, p]) => (
+          <button
+            key={k}
+            onClick={() => onChange("pagamento", k)}
+            aria-pressed={dado.pagamento === k}
+            className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+              dado.pagamento === k ? "bg-white/20 text-white" : "bg-white/5 text-white/40 hover:bg-white/10"
+            }`}
+          >
+            {p.rot}
+          </button>
+        ))}
+
+        {meio.iof && (
+          <button
+            onClick={() => onChange("iofIsento", !dado.iofIsento)}
+            aria-pressed={!dado.iofIsento}
+            title={dado.iofIsento ? "IOF isento neste item" : `IOF de ${aliquota}% aplicado`}
+            className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+              temIOF ? "bg-rose-500/15 text-rose-300" : "bg-white/5 text-white/30 line-through"
+            }`}
+          >
+            IOF
+          </button>
+        )}
+      </div>
+
+      {temIOF && iof > 0 && (
+        <div className="text-[11px] text-rose-300/80 tabular-nums">
+          + {MOEDAS[dado.moeda]?.rot || ""} {fmt(iof, 2)} de IOF ({aliquota}%)
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─────────────────────────  APP  ───────────────────────── */
 
 export default function App() {
@@ -243,7 +374,7 @@ export default function App() {
   useEffect(() => {
     try {
       const salvo = window.localStorage.getItem(CHAVE);
-      if (salvo) setEstado({ ...ESTADO_INICIAL, ...JSON.parse(salvo) });
+      if (salvo) setEstado(migrar(JSON.parse(salvo)));
     } catch (e) { /* começa do zero */ }
     setCarregado(true);
   }, []);
@@ -259,7 +390,7 @@ export default function App() {
         if (!vivo) return;
         if (remoto?.dados) {
           ignorarProximo.current = true;
-          setEstado({ ...ESTADO_INICIAL, ...remoto.dados });
+          setEstado(migrar(remoto.dados));
         }
         setSinc("ok");
       } catch (e) {
@@ -277,7 +408,7 @@ export default function App() {
     if (!carregado || !configurado) return;
     return ouvirNuvem(({ dados }) => {
       ignorarProximo.current = true;
-      setEstado({ ...ESTADO_INICIAL, ...dados });
+      setEstado(migrar(dados));
     });
   }, [carregado]);
 
@@ -306,21 +437,52 @@ export default function App() {
     return () => clearTimeout(t);
   }, [estado, carregado]);
 
+  /* Junta todos os custos — dias e hospedagens — numa lista só */
+  const lancamentos = useMemo(() => {
+    const out = [];
+    (estado.roteiro || []).forEach((d) => {
+      if (!d.lanc) return;
+      out.push({ chave: `dia-${d.id}`, rotulo: `Dia ${d.n} · ${d.titulo}`, l: d.lanc, origem: "roteiro", ref: d });
+    });
+    (estado.hospedagens || []).forEach((b) => {
+      const slot = b.slots.find((s) => s.id === b.escolhido);
+      if (!slot) return;
+      const l = { ...(slot.lanc || {}), moeda: slot.moeda, valor: totalLocal(slot) };
+      out.push({ chave: `hosp-${b.id}`, rotulo: `${b.nome} · ${slot.hotel || "hotel"}`, l, origem: "hospedagem", ref: b });
+    });
+    return out;
+  }, [estado.roteiro, estado.hospedagens]);
+
+  const fin = useMemo(() => {
+    const z = { pago: 0, faturar: 0, chegada: 0, aberto: 0, iof: 0, total: 0 };
+    lancamentos.forEach(({ l }) => {
+      const usd = lancEmUSD(l, estado.cambio, estado.iof);
+      const taxa = Number(estado.cambio?.[l.moeda]) || 0;
+      z[l.status] = (z[l.status] || 0) + usd;
+      z.iof += iofDe(l, estado.iof) * taxa;
+      z.total += usd;
+    });
+    z.pendente = z.faturar + z.chegada + z.aberto;
+    return z;
+  }, [lancamentos, estado.cambio, estado.iof]);
+
   const totalRoteiro = useMemo(
-    () => estado.roteiro.reduce((s, d) => s + (Number(d.custo) || 0), 0),
-    [estado.roteiro]
+    () => (estado.roteiro || []).reduce((s, d) => s + lancEmUSD(d.lanc, estado.cambio, estado.iof), 0),
+    [estado.roteiro, estado.cambio, estado.iof]
   );
 
   const totalHosp = useMemo(
     () => (estado.hospedagens || []).reduce((s, b) => {
       const slot = b.slots.find((x) => x.id === b.escolhido);
-      return s + (slot ? emUSD(slot, estado.cambio) : 0);
+      if (!slot) return s;
+      return s + lancEmUSD({ ...(slot.lanc || {}), moeda: slot.moeda, valor: totalLocal(slot) }, estado.cambio, estado.iof);
     }, 0),
-    [estado.hospedagens, estado.cambio]
+    [estado.hospedagens, estado.cambio, estado.iof]
   );
 
-  const total = totalRoteiro + totalHosp;
+  const total = fin.total;
   const pct = Math.min(100, (total / (estado.orcamento || 1)) * 100);
+  const pctPago = Math.min(100, (fin.pago / (estado.orcamento || 1)) * 100);
   const restante = estado.orcamento - total;
   const feitos = estado.alertas.filter((a) => a.feito).length;
   const dia = estado.roteiro[ativo];
@@ -362,6 +524,15 @@ export default function App() {
 
   const atualizarCambio = (moeda, valor) =>
     setEstado((s) => ({ ...s, cambio: { ...s.cambio, [moeda]: valor } }));
+
+  const atualizarLancDia = (diaId, campo, valor) =>
+    setEstado((s) => ({ ...s, roteiro: s.roteiro.map((d) => d.id !== diaId ? d
+      : { ...d, lanc: { ...(d.lanc || lanc()), [campo]: valor } }) }));
+
+  const atualizarLancSlot = (baseId, slotId, campo, valor) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
+      : { ...b, slots: b.slots.map((sl) => sl.id !== slotId ? sl
+          : { ...sl, lanc: { ...(sl.lanc || {}), [campo]: valor } }) }) }));
 
   const restaurar = () => {
     if (window.confirm("Restaurar tudo ao estado original? Roteiro, hospedagens e checklist serão zerados.")) setEstado(ESTADO_INICIAL);
@@ -417,10 +588,10 @@ export default function App() {
         {/* Resumo */}
         <div className={`${vidro} rounded-2xl p-5 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4`}>
           {[
-            { rot: "Total estimado", val: `US$ ${fmt(total)}` },
-            { rot: "Orçamento", val: <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /> },
+            { rot: "Já pago", val: `US$ ${fmt(fin.pago)}`, cor: "text-emerald-300" },
+            { rot: "A pagar", val: `US$ ${fmt(fin.pendente)}`, cor: "text-amber-300" },
+            { rot: "Total", val: `US$ ${fmt(total)}` },
             { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-emerald-300" : "text-rose-300" },
-            { rot: "Pendências", val: `${feitos}/${estado.alertas.length}`, cor: feitos === estado.alertas.length ? "text-emerald-300" : "text-amber-300" },
           ].map((k, i) => (
             <div key={i}>
               <div className="text-[10px] uppercase tracking-widest text-white/45 mb-1">{k.rot}</div>
@@ -428,11 +599,16 @@ export default function App() {
             </div>
           ))}
           <div className="col-span-2 sm:col-span-4">
-            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden flex">
+              <div className="h-full bg-emerald-400 transition-all duration-700" style={{ width: `${pctPago}%` }} />
               <div
-                className={`h-full rounded-full transition-all duration-700 ${restante >= 0 ? "bg-gradient-to-r from-cyan-400 to-emerald-400" : "bg-gradient-to-r from-amber-400 to-rose-500"}`}
-                style={{ width: `${pct}%` }}
+                className={`h-full transition-all duration-700 ${restante >= 0 ? "bg-amber-400/70" : "bg-rose-500"}`}
+                style={{ width: `${Math.max(0, pct - pctPago)}%` }}
               />
+            </div>
+            <div className="flex justify-between mt-1.5 text-[10px] text-white/40">
+              <span>Orçamento <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /></span>
+              {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: US$ {fmt(fin.iof)}</span>}
             </div>
           </div>
         </div>
@@ -485,10 +661,33 @@ export default function App() {
                 </div>
                 <div className="text-right shrink-0">
                   <div className="text-[10px] uppercase tracking-widest text-white/45">Custo do dia</div>
-                  <div className="text-xl font-bold text-emerald-300">
-                    <Editavel valor={dia.custo} numero prefixo="US$ " onChange={(v) => atualizarDia(dia.id, "custo", v)} />
+                  <div className="flex items-center gap-1.5 justify-end">
+                    <div className="text-xl font-bold text-emerald-300">
+                      <Editavel valor={dia.lanc?.valor ?? 0} numero onChange={(v) => atualizarLancDia(dia.id, "valor", v)} />
+                    </div>
+                    <select
+                      value={dia.lanc?.moeda || "USD"}
+                      onChange={(e) => atualizarLancDia(dia.id, "moeda", e.target.value)}
+                      aria-label="Moeda do dia"
+                      className="text-[10px] font-bold py-1 px-1 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                    >
+                      {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
                   </div>
+                  {dia.lanc?.moeda !== "USD" && (
+                    <div className="text-[11px] text-white/40 tabular-nums mt-0.5">
+                      ≈ US$ {fmt(lancEmUSD(dia.lanc, estado.cambio, estado.iof))}
+                    </div>
+                  )}
                 </div>
+              </div>
+
+              <div className="mb-4 pb-4 border-b border-white/10">
+                <Pagamento
+                  l={dia.lanc}
+                  aliquota={estado.iof}
+                  onChange={(c, v) => atualizarLancDia(dia.id, c, v)}
+                />
               </div>
 
               <h2 className="text-2xl font-bold mb-1 leading-snug">
@@ -561,54 +760,112 @@ export default function App() {
 
         {/* CUSTOS */}
         {aba === "custos" && (
-          <div className={`${vidro} rounded-2xl p-6`}>
-            <h2 className="text-xl font-bold mb-1">Custos por dia</h2>
-            <p className="text-sm text-white/50 mb-6">Clique em qualquer valor para ajustar. O total recalcula na hora.</p>
-            <ul className="space-y-1.5">
-              {estado.roteiro.map((d, i) => {
-                const largura = (d.custo / Math.max(...estado.roteiro.map((x) => x.custo || 1))) * 100;
-                return (
-                  <li key={d.id} className="relative rounded-xl overflow-hidden border border-white/10 hover:border-white/25 transition-colors">
-                    <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500/25 to-transparent transition-all duration-500" style={{ width: `${largura}%` }} />
-                    <button
-                      onClick={() => { setAba("roteiro"); setAtivo(i); }}
-                      className="relative w-full flex items-center gap-4 px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
-                    >
-                      <span className="text-sm font-bold w-14 shrink-0 text-white/50 tabular-nums">Dia {d.n}</span>
-                      <span className="flex-1 text-sm truncate text-white/85">{d.titulo}</span>
-                    </button>
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-emerald-300 tabular-nums">
-                      <Editavel valor={d.custo} numero prefixo="US$ " onChange={(v) => atualizarDia(d.id, "custo", v)} />
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="mt-6 pt-5 border-t border-white/15 space-y-2">
-              <div className="flex items-baseline justify-between text-sm">
-                <span className="text-white/50">Passeios e refeições</span>
-                <span className="tabular-nums font-semibold">US$ {fmt(totalRoteiro)}</span>
+          <div className="space-y-3">
+            {/* Resumo por status */}
+            <div className={`${vidro} rounded-2xl p-6`}>
+              <h2 className="text-xl font-bold mb-4">Situação financeira</h2>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-5">
+                {Object.entries(STATUS).map(([k, st]) => {
+                  const c = CORES[st.cor];
+                  const v = fin[k] || 0;
+                  const n = lancamentos.filter((x) => x.l.status === k).length;
+                  return (
+                    <div key={k} className={`rounded-xl border p-3.5 ${c.bg} ${c.bd}`}>
+                      <div className={`text-[10px] uppercase tracking-widest mb-1 ${c.txt}`}>{st.rot}</div>
+                      <div className="text-xl font-bold tabular-nums">US$ {fmt(v)}</div>
+                      <div className="text-[10px] text-white/35 mt-0.5">{n} {n === 1 ? "item" : "itens"}</div>
+                    </div>
+                  );
+                })}
               </div>
-              <div className="flex items-baseline justify-between text-sm">
-                <button
-                  onClick={() => setAba("hotel")}
-                  className="text-white/50 hover:text-cyan-300 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded px-1 -mx-1"
-                >
-                  Hospedagem →
-                </button>
-                <span className="tabular-nums font-semibold">US$ {fmt(totalHosp)}</span>
+
+              <div className="space-y-2 pt-4 border-t border-white/15">
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-emerald-300 font-semibold">Gasto alocado pago</span>
+                  <span className="tabular-nums font-bold text-emerald-300">US$ {fmt(fin.pago)}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="text-amber-300 font-semibold">Gasto alocado pendente</span>
+                  <span className="tabular-nums font-bold text-amber-300">US$ {fmt(fin.pendente)}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-xs text-white/40 pl-3">
+                  <span>· na fatura antes da viagem</span>
+                  <span className="tabular-nums">US$ {fmt(fin.faturar)}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-xs text-white/40 pl-3">
+                  <span>· a pagar na chegada</span>
+                  <span className="tabular-nums">US$ {fmt(fin.chegada)}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-xs text-white/40 pl-3">
+                  <span>· ainda sem reserva</span>
+                  <span className="tabular-nums">US$ {fmt(fin.aberto)}</span>
+                </div>
+                {fin.iof > 0 && (
+                  <div className="flex items-baseline justify-between text-xs text-rose-300/80 pt-2 border-t border-white/10">
+                    <span>IOF incluído nos valores acima</span>
+                    <span className="tabular-nums">US$ {fmt(fin.iof)}</span>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between pt-3 border-t border-white/15">
+                  <span className="text-sm uppercase tracking-widest text-white/50">Total</span>
+                  <span className="text-3xl font-black tabular-nums">US$ {fmt(total)}</span>
+                </div>
               </div>
-              <div className="flex items-baseline justify-between pt-3 border-t border-white/10">
-                <span className="text-sm uppercase tracking-widest text-white/50">Total</span>
-                <span className="text-3xl font-black tabular-nums">US$ {fmt(total)}</span>
+
+              <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between gap-3">
+                <div className="text-xs text-white/45">
+                  Alíquota do IOF{" "}
+                  <span className="font-bold text-white/80">
+                    <Editavel valor={estado.iof} numero onChange={(v) => setEstado((s) => ({ ...s, iof: v }))} />%
+                  </span>
+                </div>
+                <div className="text-xs text-white/35 text-right">
+                  Passeios US$ {fmt(totalRoteiro)} · Hospedagem US$ {fmt(totalHosp)}
+                </div>
               </div>
             </div>
-            <p className="mt-3 text-xs text-white/40 leading-relaxed">
-              Não inclui as passagens aéreas. A hospedagem soma apenas as opções marcadas como escolhidas.
-            </p>
-            <button onClick={restaurar} className="mt-5 flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded px-1">
-              <RotateCcw size={12} /> Restaurar roteiro original
-            </button>
+
+            {/* Lista de lançamentos */}
+            <div className={`${vidro} rounded-2xl p-6`}>
+              <h3 className="text-base font-bold mb-1">Lançamentos</h3>
+              <p className="text-sm text-white/50 mb-5">
+                Cada dia e cada hotel escolhido. Clique para abrir e ajustar.
+              </p>
+              <ul className="space-y-1.5">
+                {lancamentos.map((x) => {
+                  const st = STATUS[x.l.status] || STATUS.aberto;
+                  const c = CORES[st.cor];
+                  const usd = lancEmUSD(x.l, estado.cambio, estado.iof);
+                  const i = estado.roteiro.findIndex((d) => `dia-${d.id}` === x.chave);
+                  return (
+                    <li key={x.chave}>
+                      <button
+                        onClick={() => { if (i >= 0) { setAba("roteiro"); setAtivo(i); } else setAba("hotel"); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 hover:border-white/25 hover:bg-white/[0.06] transition-all text-left focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                      >
+                        <span className={`shrink-0 w-1.5 h-8 rounded-full ${c.solid}`} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm truncate text-white/85">{x.rotulo}</span>
+                          <span className={`text-[10px] uppercase tracking-wider ${c.txt}`}>
+                            {st.curto} · {PAGAMENTOS[x.l.pagamento]?.rot || "—"}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-white/90">
+                          US$ {fmt(usd)}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-4 text-xs text-white/40 leading-relaxed">
+                Não inclui passagens aéreas. A hospedagem soma apenas as opções marcadas como escolhidas.
+              </p>
+              <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded px-1">
+                <RotateCcw size={12} /> Restaurar tudo ao original
+              </button>
+            </div>
           </div>
         )}
 
@@ -710,7 +967,7 @@ export default function App() {
                       <span className="text-[11px] uppercase tracking-widest text-white/45">{b.noites}</span>
                       {escolhido && (
                         <div className="text-sm font-bold text-emerald-300 tabular-nums">
-                          US$ {fmt(emUSD(escolhido, estado.cambio))}
+                          US$ {fmt(lancEmUSD({ ...(escolhido.lanc || {}), moeda: escolhido.moeda, valor: totalLocal(escolhido) }, estado.cambio, estado.iof))}
                         </div>
                       )}
                     </div>
@@ -720,7 +977,6 @@ export default function App() {
                     {b.slots.map((sl, i) => {
                       const ativo = b.escolhido === sl.id;
                       const local = totalLocal(sl);
-                      const usd = emUSD(sl, estado.cambio);
                       return (
                         <div
                           key={sl.id}
@@ -795,10 +1051,20 @@ export default function App() {
                           </div>
 
                           <div className="mt-3 pt-2.5 border-t border-white/10">
-                            <div className="flex items-baseline justify-between">
-                              <span className="text-xs text-white/45">{MOEDAS[sl.moeda].rot} {fmt(local, sl.moeda === "USD" ? 0 : 0)}</span>
-                              <span className="text-base font-bold text-emerald-300 tabular-nums">US$ {fmt(usd)}</span>
+                            <div className="flex items-baseline justify-between mb-2">
+                              <span className="text-xs text-white/45">{MOEDAS[sl.moeda].rot} {fmt(local, 0)}</span>
+                              <span className="text-base font-bold text-emerald-300 tabular-nums">
+                                US$ {fmt(lancEmUSD({ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }, estado.cambio, estado.iof))}
+                              </span>
                             </div>
+                            {ativo && (
+                              <Pagamento
+                                l={{ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }}
+                                aliquota={estado.iof}
+                                compacto
+                                onChange={(c, v) => atualizarLancSlot(b.id, sl.id, c, v)}
+                              />
+                            )}
                           </div>
                         </div>
                       );
