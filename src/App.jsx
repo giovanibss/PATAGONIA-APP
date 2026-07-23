@@ -872,12 +872,15 @@ export default function App() {
                       key={a.id}
                       className="group flex gap-4 items-start rounded-xl border border-white/10 bg-white/[0.05] p-4 transition-all duration-300 hover:bg-white/[0.12] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
                     >
-                      <div className="shrink-0 flex flex-col items-center gap-2 w-14">
-                        <span className="flex items-center gap-1 text-sm font-bold tabular-nums text-cyan-200">
-                          <Clock size={11} className="opacity-50" />
-                        </span>
-                        <Editavel valor={a.hora} className="text-sm font-bold tabular-nums text-cyan-200 -mt-7 pl-4"
-                          onChange={(v) => atualizarAtiv(dia.id, a.id, "hora", v)} />
+                      <div className="shrink-0 flex flex-col items-center gap-1.5 w-[4.5rem]">
+                        <div className="flex items-center gap-1 text-cyan-200 w-full justify-center">
+                          <Clock size={11} className="opacity-50 shrink-0" />
+                          <Editavel
+                            valor={a.hora}
+                            className="text-sm font-bold tabular-nums min-w-0 [&>svg]:hidden"
+                            onChange={(v) => atualizarAtiv(dia.id, a.id, "hora", v)}
+                          />
+                        </div>
                         <Icone size={15} className="text-white/35" />
                       </div>
                       <p className="flex-1 text-[15px] leading-relaxed text-white/85 pt-0.5">
