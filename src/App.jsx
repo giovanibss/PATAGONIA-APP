@@ -21,6 +21,54 @@ const ALERTAS_INICIAIS = [
   { id: "a7", texto: "Confirmar as 2 noites seguidas em Puerto Natales (dias 8 e 9)", critico: false, feito: false },
 ];
 
+/* ─────────────────────────  FINANCEIRO  ───────────────────────── */
+
+/* IOF sobre compras internacionais no cartão. Fixado em 3,5% desde 2025.
+   Editável porque alguns bancos oferecem isenção ou cashback. */
+const IOF_PADRAO = 3.5;
+
+const STATUS = {
+  pago:      { rot: "Pago",           curto: "Pago",      cor: "emerald", desc: "Fatura já quitada" },
+  faturar:   { rot: "Cai na fatura",  curto: "Fatura",    cor: "amber",   desc: "Reservado, cobrança antes da viagem" },
+  chegada:   { rot: "Pago na chegada",curto: "Chegada",   cor: "sky",     desc: "Reservado, paga no local" },
+  aberto:    { rot: "Não reservado",  curto: "Aberto",    cor: "slate",   desc: "Ainda sem reserva" },
+};
+
+const PAGAMENTOS = {
+  credito: { rot: "Crédito", iof: true },
+  especie: { rot: "Espécie", iof: false },
+  debito:  { rot: "Débito/Global", iof: true },
+};
+
+const CORES = {
+  emerald: { txt: "text-emerald-300", bg: "bg-emerald-500/10", bd: "border-emerald-400/30", solid: "bg-emerald-400" },
+  amber:   { txt: "text-amber-300",   bg: "bg-amber-500/10",   bd: "border-amber-400/30",   solid: "bg-amber-400" },
+  sky:     { txt: "text-sky-300",     bg: "bg-sky-500/10",     bd: "border-sky-400/30",     solid: "bg-sky-400" },
+  slate:   { txt: "text-white/50",    bg: "bg-white/5",        bd: "border-white/15",       solid: "bg-white/40" },
+};
+
+/* Lançamento padrão. Todo custo — de dia ou de hotel — vira um destes. */
+const lanc = (valor = 0) => ({
+  status: "aberto", pagamento: "credito", moeda: "USD", iofIsento: false, valor,
+});
+
+/* IOF incide sobre o valor convertido em reais, mas como o painel trabalha
+   em dólar, o percentual é equivalente em qualquer moeda. */
+function iofDe(l, aliquota) {
+  if (!l) return 0;
+  const meio = PAGAMENTOS[l.pagamento];
+  if (!meio?.iof || l.iofIsento) return 0;
+  return (Number(l.valor) || 0) * ((Number(aliquota) || 0) / 100);
+}
+
+/* Valor cheio do lançamento, já com IOF, convertido para US$ */
+function lancEmUSD(l, cambio, aliquota) {
+  if (!l) return 0;
+  const taxa = Number(cambio?.[l.moeda]);
+  const bruto = (Number(l.valor) || 0) + iofDe(l, aliquota);
+  return bruto * (Number.isFinite(taxa) ? taxa : 0);
+}
+
 /* Cotações de referência: quanto vale 1 unidade da moeda em US$.
    Editáveis no app — confira o câmbio do dia antes de confiar nos números. */
 const CAMBIO_PADRAO = { USD: 1, BRL: 0.185, ARS: 0.00068, CLP: 0.00110 };
@@ -151,9 +199,15 @@ function migrar(bruto) {
 
   e.hospedagens = (e.hospedagens || []).map((b) => ({
     ...b,
-    slots: (b.slots || []).map((s) =>
-      s.lanc ? s : { ...s, lanc: { status: "aberto", pagamento: "credito", iofIsento: false } }
-    ),
+    slots: (b.slots || []).map((s) => ({
+      ...s,
+      lanc: {
+        status: "aberto",
+        pagamento: "credito",
+        iofIsento: false,
+        ...(s.lanc || {}),
+      },
+    })),
   }));
 
   if (typeof e.iof !== "number") e.iof = IOF_PADRAO;
@@ -171,54 +225,6 @@ const FUNDOS = [
 ];
 
 const INTERVALO_FUNDO = 12000;
-
-/* ─────────────────────────  FINANCEIRO  ───────────────────────── */
-
-/* IOF sobre compras internacionais no cartão. Fixado em 3,5% desde 2025.
-   Editável porque alguns bancos oferecem isenção ou cashback. */
-const IOF_PADRAO = 3.5;
-
-const STATUS = {
-  pago:      { rot: "Pago",           curto: "Pago",      cor: "emerald", desc: "Fatura já quitada" },
-  faturar:   { rot: "Cai na fatura",  curto: "Fatura",    cor: "amber",   desc: "Reservado, cobrança antes da viagem" },
-  chegada:   { rot: "Pago na chegada",curto: "Chegada",   cor: "sky",     desc: "Reservado, paga no local" },
-  aberto:    { rot: "Não reservado",  curto: "Aberto",    cor: "slate",   desc: "Ainda sem reserva" },
-};
-
-const PAGAMENTOS = {
-  credito: { rot: "Crédito", iof: true },
-  especie: { rot: "Espécie", iof: false },
-  debito:  { rot: "Débito/Global", iof: true },
-};
-
-const CORES = {
-  emerald: { txt: "text-emerald-300", bg: "bg-emerald-500/10", bd: "border-emerald-400/30", solid: "bg-emerald-400" },
-  amber:   { txt: "text-amber-300",   bg: "bg-amber-500/10",   bd: "border-amber-400/30",   solid: "bg-amber-400" },
-  sky:     { txt: "text-sky-300",     bg: "bg-sky-500/10",     bd: "border-sky-400/30",     solid: "bg-sky-400" },
-  slate:   { txt: "text-white/50",    bg: "bg-white/5",        bd: "border-white/15",       solid: "bg-white/40" },
-};
-
-/* Lançamento padrão. Todo custo — de dia ou de hotel — vira um destes. */
-const lanc = (valor = 0) => ({
-  status: "aberto", pagamento: "credito", moeda: "USD", iofIsento: false, valor,
-});
-
-/* IOF incide sobre o valor convertido em reais, mas como o painel trabalha
-   em dólar, o percentual é equivalente em qualquer moeda. */
-function iofDe(l, aliquota) {
-  if (!l) return 0;
-  const meio = PAGAMENTOS[l.pagamento];
-  if (!meio?.iof || l.iofIsento) return 0;
-  return (Number(l.valor) || 0) * ((Number(aliquota) || 0) / 100);
-}
-
-/* Valor cheio do lançamento, já com IOF, convertido para US$ */
-function lancEmUSD(l, cambio, aliquota) {
-  if (!l) return 0;
-  const taxa = Number(cambio?.[l.moeda]);
-  const bruto = (Number(l.valor) || 0) + iofDe(l, aliquota);
-  return bruto * (Number.isFinite(taxa) ? taxa : 0);
-}
 
 /* ─────────────────────────  CONVERSÃO  ───────────────────────── */
 
@@ -458,7 +464,8 @@ export default function App() {
     lancamentos.forEach(({ l }) => {
       const usd = lancEmUSD(l, estado.cambio, estado.iof);
       const taxa = Number(estado.cambio?.[l.moeda]) || 0;
-      z[l.status] = (z[l.status] || 0) + usd;
+      const st = STATUS[l.status] ? l.status : "aberto";
+      z[st] += usd;
       z.iof += iofDe(l, estado.iof) * taxa;
       z.total += usd;
     });
