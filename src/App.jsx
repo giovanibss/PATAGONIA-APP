@@ -3,7 +3,7 @@ import {
   Mountain, Wallet, ListChecks, CalendarDays, MapPin, Clock,
   Check, Plus, Trash2, ChevronLeft, ChevronRight, AlertTriangle,
   BedDouble, Pencil, RotateCcw, Ship, Utensils, Car, Footprints,
-  Cloud, CloudOff, RefreshCw,
+  Cloud, CloudOff, RefreshCw, ChevronDown,
 } from "lucide-react";
 import { configurado, carregarNuvem, salvarNuvem, ouvirNuvem, ID_VIAGEM } from "./supabase";
 
@@ -421,6 +421,46 @@ export default function App() {
   const [fundo, setFundo] = useState(0);
   const [sinc, setSinc] = useState(configurado ? "carregando" : "local");
   const [erroSinc, setErroSinc] = useState("");
+  const [abrirFin, setAbrirFin] = useState(true);
+  const [abrirCambio, setAbrirCambio] = useState(false);
+  const [buscandoCambio, setBuscandoCambio] = useState(false);
+
+  /* Busca cotações na open.er-api.com (gratuita, sem chave, atualiza 1x/dia).
+     A resposta traz "quantos X valem 1 dólar"; o app guarda o inverso. */
+  const buscarCambio = async (forcar = false) => {
+    const idade = Date.now() - (estado.cambioAtualizadoEm || 0);
+    if (!forcar && idade < 12 * 60 * 60 * 1000) return; /* já atualizado hoje */
+    setBuscandoCambio(true);
+    try {
+      const r = await fetch("https://open.er-api.com/v6/latest/USD");
+      const j = await r.json();
+      if (j?.result !== "success" || !j.rates) throw new Error("resposta inválida");
+      const novo = { USD: 1 };
+      ["BRL", "ARS", "CLP"].forEach((m) => {
+        const taxa = Number(j.rates[m]);
+        if (taxa > 0) novo[m] = 1 / taxa;
+      });
+      setEstado((s) => ({
+        ...s,
+        cambio: { ...s.cambio, ...novo },
+        cambioAtualizadoEm: Date.now(),
+      }));
+    } catch (e) {
+      /* sem rede ou API fora: mantém os valores atuais, editáveis à mão */
+    } finally {
+      setBuscandoCambio(false);
+    }
+  };
+
+  /* Atualiza sozinho, no máximo 1x a cada 12h — mas só depois que a carga
+     da nuvem resolver, senão o estado remoto sobrescreve as cotações novas */
+  const cambioJaBuscado = useRef(false);
+  useEffect(() => {
+    if (!carregado || sinc === "carregando" || cambioJaBuscado.current) return;
+    cambioJaBuscado.current = true;
+    buscarCambio(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregado, sinc]);
 
   /* Evita que a gravação dispare por mudanças vindas da própria nuvem */
   const ignorarProximo = useRef(false);
@@ -853,10 +893,28 @@ export default function App() {
         {/* CUSTOS */}
         {aba === "custos" && (
           <div className="space-y-3">
-            {/* Resumo por status */}
+            {/* Resumo por status (retrátil) */}
             <div className={`${vidro} rounded-2xl p-6`}>
-              <h2 className="text-xl font-bold mb-4">Situação financeira</h2>
+              <button
+                onClick={() => setAbrirFin((v) => !v)}
+                aria-expanded={abrirFin}
+                className="w-full flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded-lg"
+              >
+                <h2 className="text-xl font-bold">Situação financeira</h2>
+                <div className="flex items-center gap-3 shrink-0">
+                  {!abrirFin && (
+                    <span className="text-sm tabular-nums">
+                      <span className="text-emerald-300 font-bold">US$ {fmt(fin.pago)}</span>
+                      <span className="text-white/30 mx-1">·</span>
+                      <span className="text-amber-300 font-bold">US$ {fmt(fin.pendente)}</span>
+                    </span>
+                  )}
+                  <ChevronDown size={18} className={`text-white/50 transition-transform duration-300 ${abrirFin ? "rotate-180" : ""}`} />
+                </div>
+              </button>
 
+              {abrirFin && (
+                <div className="mt-4">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-5">
                 {Object.entries(STATUS).map(([k, st]) => {
                   const c = CORES[st.cor];
@@ -916,6 +974,81 @@ export default function App() {
                   Passeios US$ {fmt(totalRoteiro)} · Hospedagem US$ {fmt(totalHosp)}
                 </div>
               </div>
+                </div>
+              )}
+            </div>
+
+            {/* Câmbio (retrátil) */}
+            <div className={`${vidro} rounded-2xl p-6`}>
+              <button
+                onClick={() => setAbrirCambio((v) => !v)}
+                aria-expanded={abrirCambio}
+                className="w-full flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded-lg"
+              >
+                <h2 className="text-xl font-bold">Câmbio</h2>
+                <div className="flex items-center gap-3 shrink-0">
+                  {!abrirCambio && (
+                    <span className="text-xs text-white/45 tabular-nums hidden sm:inline">
+                      R$ {fmt(1 / (estado.cambio.BRL || 1), 2)}/US$
+                    </span>
+                  )}
+                  <ChevronDown size={18} className={`text-white/50 transition-transform duration-300 ${abrirCambio ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+
+              {abrirCambio && (
+                <div className="mt-4">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <p className="text-xs text-white/45 leading-relaxed">
+                      Quanto vale 1 unidade da moeda em dólar. Atualiza sozinho uma vez por dia; dá para ajustar à mão se estiver sem internet.
+                    </p>
+                    <button
+                      onClick={() => buscarCambio(true)}
+                      disabled={buscandoCambio}
+                      className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-cyan-200 px-2.5 py-1.5 rounded-lg hover:bg-white/10 disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                    >
+                      <RefreshCw size={13} className={buscandoCambio ? "animate-spin" : ""} />
+                      Atualizar agora
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {Object.entries(MOEDAS).map(([cod, m]) => (
+                      <div key={cod} className="rounded-xl bg-white/[0.05] border border-white/10 p-3">
+                        <div className="text-[10px] uppercase tracking-widest text-cyan-300/70 mb-1">{cod} · {m.nome}</div>
+                        {cod === "USD" ? (
+                          <div className="text-sm font-semibold text-white/40">1,00 (base)</div>
+                        ) : (
+                          <>
+                            <div className="text-sm font-semibold tabular-nums">
+                              <Editavel valor={estado.cambio[cod]} numero onChange={(v) => atualizarCambio(cod, v)} />
+                            </div>
+                            <div className="text-[10px] text-white/35 mt-0.5 tabular-nums">
+                              {fmt(1 / (estado.cambio[cod] || 1), 2)} por US$ 1
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex items-baseline justify-between gap-3 text-[11px] text-white/35">
+                    <span>
+                      {estado.cambioAtualizadoEm
+                        ? `Atualizado em ${new Date(estado.cambioAtualizadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                        : "Ainda não atualizado automaticamente"}
+                    </span>
+                    <a
+                      href="https://www.exchangerate-api.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:text-white/60 transition-colors shrink-0"
+                    >
+                      Rates by Exchange Rate API
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Fichas de custo */}
@@ -1302,31 +1435,6 @@ export default function App() {
                 </div>
               );
             })}
-
-            {/* Câmbio */}
-            <div className={`${vidro} rounded-2xl p-5`}>
-              <h3 className="text-base font-bold mb-1">Câmbio</h3>
-              <p className="text-xs text-white/45 mb-4 leading-relaxed">
-                Quanto vale 1 unidade em dólar. Valores de referência — confira a cotação do dia e ajuste aqui.
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {Object.entries(MOEDAS).map(([cod, m]) => (
-                  <div key={cod} className="rounded-xl bg-white/[0.05] border border-white/10 p-3">
-                    <div className="text-[10px] uppercase tracking-widest text-cyan-300/70 mb-1">{cod} · {m.nome}</div>
-                    {cod === "USD" ? (
-                      <div className="text-sm font-semibold text-white/40">1,00 (base)</div>
-                    ) : (
-                      <div className="text-sm font-semibold tabular-nums">
-                        <Editavel valor={estado.cambio[cod]} numero onChange={(v) => atualizarCambio(cod, v)} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <p className="mt-4 text-xs text-white/40">
-                Total em hospedagem: <span className="font-bold text-emerald-300">US$ {fmt(totalHosp)}</span>
-              </p>
-            </div>
           </div>
         )}
 
