@@ -81,20 +81,19 @@ const MOEDAS = {
 };
 
 /* modo "diaria": total = diaria x noites + taxas | modo "fechado": total = valorFechado */
-const hosp = (id, nome) => ({
-  id, nome, escolhido: null,
-  slots: [
-    { id: `${id}-s1`, hotel: "", modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0 },
-    { id: `${id}-s2`, hotel: "", modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0 },
-    { id: `${id}-s3`, hotel: "", modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0 },
-  ],
+/* Cada hotel é uma reserva independente: tem seus próprios dias, valores e
+   status. Vários podem estar ativos na mesma base. */
+const novoHotel = (id) => ({
+  id, hotel: "", ativo: false, diasIds: [],
+  modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0,
+  lanc: { status: "aberto", pagamento: "credito", iofIsento: false },
 });
 
 const HOSPEDAGENS_INICIAIS = [
-  { ...hosp("h1", "El Calafate"), noites: "Dias 1–2, 9–11" },
-  { ...hosp("h2", "El Chaltén"), noites: "Dias 3–5" },
-  { ...hosp("h3", "Torres del Paine"), noites: "Dias 6–7" },
-  { ...hosp("h4", "Puerto Natales"), noites: "Dias 8–9" },
+  { id: "h1", nome: "El Calafate", noites: "Dias 1–2, 9–11", slots: [novoHotel("h1-s1")] },
+  { id: "h2", nome: "El Chaltén", noites: "Dias 3–5", slots: [novoHotel("h2-s1")] },
+  { id: "h3", nome: "Torres del Paine", noites: "Dias 6–7", slots: [novoHotel("h3-s1")] },
+  { id: "h4", nome: "Puerto Natales", noites: "Dias 8–9", slots: [novoHotel("h4-s1")] },
 ];
 
 const ic = { carro: Car, barco: Ship, trilha: Footprints, comida: Utensils, ponto: MapPin };
@@ -221,19 +220,27 @@ function migrar(bruto) {
   /* o lanc do dia deixa de existir para não contar em dobro */
   e.roteiro = (e.roteiro || []).map(({ lanc: _l, custo: _c, ...d }) => d);
 
-  e.hospedagens = (e.hospedagens || []).map((b) => ({
-    ...b,
-    diasIds: Array.isArray(b.diasIds) ? b.diasIds : [],
-    slots: (b.slots || []).map((s) => ({
-      ...s,
-      lanc: {
-        status: "aberto",
-        pagamento: "credito",
-        iofIsento: false,
-        ...(s.lanc || {}),
-      },
-    })),
-  }));
+  /* Hospedagem v4: cada hotel é reserva independente, com ativo/dias próprios.
+     Antes: um "escolhido" por base e diasIds na base. */
+  e.hospedagens = (e.hospedagens || []).map((b) => {
+    const diasDaBase = Array.isArray(b.diasIds) ? b.diasIds : [];
+    const slots = (b.slots || []).map((s) => {
+      const migrado = {
+        ...s,
+        lanc: { status: "aberto", pagamento: "credito", iofIsento: false, ...(s.lanc || {}) },
+      };
+      if (typeof s.ativo !== "boolean") {
+        /* o antigo escolhido vira o único hotel ativo, e herda os dias da base */
+        migrado.ativo = b.escolhido === s.id;
+        migrado.diasIds = migrado.ativo ? diasDaBase : [];
+      } else {
+        migrado.diasIds = Array.isArray(s.diasIds) ? s.diasIds : [];
+      }
+      return migrado;
+    });
+    const { escolhido: _e, diasIds: _d, ...resto } = b;
+    return { ...resto, slots: slots.length ? slots : [novoHotel(`${b.id}-s1`)] };
+  });
 
   e.cambio = { ...CAMBIO_PADRAO, ...(e.cambio || {}) };
   if (typeof e.iof !== "number") e.iof = IOF_PADRAO;
@@ -424,6 +431,7 @@ export default function App() {
   const [abrirFin, setAbrirFin] = useState(true);
   const [abrirCambio, setAbrirCambio] = useState(false);
   const [buscandoCambio, setBuscandoCambio] = useState(false);
+  const [baseAberta, setBaseAberta] = useState({});
 
   /* Busca cotações na open.er-api.com (gratuita, sem chave, atualiza 1x/dia).
      A resposta traz "quantos X valem 1 dólar"; o app guarda o inverso. */
@@ -552,10 +560,14 @@ export default function App() {
       });
     });
     (estado.hospedagens || []).forEach((b) => {
-      const slot = b.slots.find((s) => s.id === b.escolhido);
-      if (!slot) return;
-      const l = { ...(slot.lanc || {}), moeda: slot.moeda, valor: totalLocal(slot) };
-      out.push({ chave: `hosp-${b.id}`, rotulo: `${b.nome} · ${slot.hotel || "hotel"}`, l, origem: "hospedagem", ref: b });
+      (b.slots || []).filter((s) => s.ativo).forEach((slot) => {
+        const l = { ...(slot.lanc || {}), moeda: slot.moeda, valor: totalLocal(slot) };
+        out.push({
+          chave: `hosp-${slot.id}`,
+          rotulo: `${b.nome} · ${slot.hotel || "hotel"}`,
+          l, origem: "hospedagem", ref: b,
+        });
+      });
     });
     return out;
   }, [estado.custos, estado.roteiro, estado.hospedagens]);
@@ -570,13 +582,17 @@ export default function App() {
     return m;
   }, [estado.custos, estado.cambio, estado.iof]);
 
-  /* Hotel escolhido de cada dia, para exibir no roteiro */
+  /* Hotéis de cada dia, para exibir no roteiro. Um dia pode ter mais de um
+     (ex.: troca de hotel na mesma cidade). */
   const hotelPorDia = useMemo(() => {
     const m = {};
     (estado.hospedagens || []).forEach((b) => {
-      const slot = b.slots.find((s) => s.id === b.escolhido);
-      if (!slot || !slot.hotel) return;
-      (b.diasIds || []).forEach((dId) => { m[dId] = slot.hotel; });
+      (b.slots || []).forEach((s) => {
+        if (!s.ativo || !s.hotel) return;
+        (s.diasIds || []).forEach((dId) => {
+          m[dId] = m[dId] ? [...m[dId], s.hotel] : [s.hotel];
+        });
+      });
     });
     return m;
   }, [estado.hospedagens]);
@@ -601,11 +617,9 @@ export default function App() {
   );
 
   const totalHosp = useMemo(
-    () => (estado.hospedagens || []).reduce((s, b) => {
-      const slot = b.slots.find((x) => x.id === b.escolhido);
-      if (!slot) return s;
-      return s + lancEmUSD({ ...(slot.lanc || {}), moeda: slot.moeda, valor: totalLocal(slot) }, estado.cambio, estado.iof);
-    }, 0),
+    () => (estado.hospedagens || []).reduce((s, b) =>
+      s + (b.slots || []).filter((x) => x.ativo).reduce((t, slot) =>
+        t + lancEmUSD({ ...(slot.lanc || {}), moeda: slot.moeda, valor: totalLocal(slot) }, estado.cambio, estado.iof), 0), 0),
     [estado.hospedagens, estado.cambio, estado.iof]
   );
 
@@ -649,7 +663,27 @@ export default function App() {
 
   const escolherSlot = (baseId, slotId) =>
     setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
-      : { ...b, escolhido: b.escolhido === slotId ? null : slotId }) }));
+      : { ...b, slots: b.slots.map((sl) => (sl.id === slotId ? { ...sl, ativo: !sl.ativo } : sl)) }) }));
+
+  const adicionarSlot = (baseId) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
+      : { ...b, slots: [...b.slots, novoHotel(`${baseId}-s${Date.now()}`)] }) }));
+
+  const removerSlot = (baseId, slotId) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
+      : { ...b, slots: b.slots.filter((sl) => sl.id !== slotId) }) }));
+
+  const adicionarBase = () =>
+    setEstado((s) => {
+      const id = `h-${Date.now()}`;
+      return { ...s, hospedagens: [...s.hospedagens, { id, nome: "Nova localidade", noites: "", slots: [novoHotel(`${id}-s1`)] }] };
+    });
+
+  const removerBase = (baseId) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.filter((b) => b.id !== baseId) }));
+
+  const atualizarBase = (baseId, campo, valor) =>
+    setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => (b.id === baseId ? { ...b, [campo]: valor } : b)) }));
 
   const atualizarCambio = (moeda, valor) =>
     setEstado((s) => ({ ...s, cambio: { ...s.cambio, [moeda]: valor } }));
@@ -666,11 +700,12 @@ export default function App() {
       valor: 0, moeda: "USD", status: "aberto", pagamento: "credito", iofIsento: false,
     }] }));
 
-  const alternarDiaBase = (baseId, diaId) =>
+  const alternarDiaSlot = (baseId, slotId, diaId) =>
     setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
-      : { ...b, diasIds: (b.diasIds || []).includes(diaId)
-          ? b.diasIds.filter((x) => x !== diaId)
-          : [...(b.diasIds || []), diaId] }) }));
+      : { ...b, slots: b.slots.map((sl) => sl.id !== slotId ? sl
+          : { ...sl, diasIds: (sl.diasIds || []).includes(diaId)
+              ? sl.diasIds.filter((x) => x !== diaId)
+              : [...(sl.diasIds || []), diaId] }) }) }));
 
   const atualizarLancSlot = (baseId, slotId, campo, valor) =>
     setEstado((s) => ({ ...s, hospedagens: s.hospedagens.map((b) => b.id !== baseId ? b
@@ -815,10 +850,10 @@ export default function App() {
                 </button>
               </div>
 
-              {hotelPorDia[dia.id] && (
-                <div className="flex items-center gap-2 mb-3 text-sm text-white/70">
-                  <BedDouble size={14} className="text-cyan-300/70 shrink-0" />
-                  <span className="truncate">{hotelPorDia[dia.id]}</span>
+              {hotelPorDia[dia.id]?.length > 0 && (
+                <div className="flex items-start gap-2 mb-3 text-sm text-white/70">
+                  <BedDouble size={14} className="text-cyan-300/70 shrink-0 mt-0.5" />
+                  <span className="min-w-0">{hotelPorDia[dia.id].join(" · ")}</span>
                 </div>
               )}
 
@@ -1170,7 +1205,7 @@ export default function App() {
             <div className={`${vidro} rounded-2xl p-6`}>
               <h3 className="text-base font-bold mb-1">Hospedagem no total</h3>
               <p className="text-sm text-white/50 mb-4">
-                Os hotéis escolhidos entram no consolidado. Edite os valores na aba Hospedagem.
+                As reservas ativas entram no consolidado. Edite os valores na aba Hospedagem.
               </p>
               <ul className="space-y-1.5">
                 {lancamentos.filter((x) => x.origem === "hospedagem").map((x) => {
@@ -1198,7 +1233,7 @@ export default function App() {
                 })}
               </ul>
               <p className="mt-4 text-xs text-white/40 leading-relaxed">
-                Não inclui passagens aéreas. A hospedagem soma apenas as opções marcadas como escolhidas.
+                Não inclui passagens aéreas. A hospedagem soma apenas as reservas ativas.
               </p>
               <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-white/40 hover:text-white/80 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70 rounded px-1">
                 <RotateCcw size={12} /> Restaurar tudo ao original
@@ -1289,149 +1324,196 @@ export default function App() {
         {aba === "hotel" && (
           <div className="space-y-3">
             <div className={`${vidro} rounded-2xl p-5`}>
-              <h2 className="text-xl font-bold mb-1">Hospedagem</h2>
-              <p className="text-sm text-white/50">
-                Preencha até três opções por base e marque a escolhida — só ela entra no total da viagem.
-              </p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-bold mb-1">Hospedagem</h2>
+                  <p className="text-sm text-white/50">
+                    Cada hotel é uma reserva própria, com suas noites e seu pagamento. Ative os que estão confirmados.
+                  </p>
+                </div>
+                <button
+                  onClick={adicionarBase}
+                  className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-cyan-300 hover:text-cyan-200 px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                >
+                  <Plus size={14} /> Localidade
+                </button>
+              </div>
             </div>
 
             {estado.hospedagens.map((b) => {
-              const escolhido = b.slots.find((s) => s.id === b.escolhido);
+              const ativos = (b.slots || []).filter((s) => s.ativo);
+              const totalBase = ativos.reduce((t, sl) =>
+                t + lancEmUSD({ ...(sl.lanc || {}), moeda: sl.moeda, valor: totalLocal(sl) }, estado.cambio, estado.iof), 0);
+              const aberta = baseAberta[b.id] !== false;
               return (
                 <div key={b.id} className={`${vidro} rounded-2xl p-5`}>
-                  <div className="flex items-baseline justify-between mb-4 gap-3">
-                    <h3 className="text-lg font-bold">{b.nome}</h3>
-                    <div className="text-right">
-                      <span className="text-[11px] uppercase tracking-widest text-white/45">{b.noites}</span>
-                      {escolhido && (
-                        <div className="text-sm font-bold text-emerald-300 tabular-nums">
-                          US$ {fmt(lancEmUSD({ ...(escolhido.lanc || {}), moeda: escolhido.moeda, valor: totalLocal(escolhido) }, estado.cambio, estado.iof))}
-                        </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setBaseAberta((m) => ({ ...m, [b.id]: !aberta }))}
+                      aria-expanded={aberta}
+                      aria-label={aberta ? "Recolher" : "Expandir"}
+                      className="shrink-0 p-1 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                    >
+                      <ChevronDown size={18} className={`text-white/50 transition-transform duration-300 ${aberta ? "rotate-180" : ""}`} />
+                    </button>
+                    <h3 className="text-lg font-bold flex-1 min-w-0">
+                      <Editavel valor={b.nome} onChange={(v) => atualizarBase(b.id, "nome", v)} />
+                    </h3>
+                    <div className="text-right shrink-0">
+                      {totalBase > 0 && (
+                        <div className="text-sm font-bold text-emerald-300 tabular-nums">US$ {fmtUSD(totalBase)}</div>
                       )}
+                      <div className="text-[10px] uppercase tracking-widest text-white/40">
+                        {ativos.length ? `${ativos.length} ${ativos.length === 1 ? "reserva" : "reservas"}` : "sem reserva"}
+                      </div>
                     </div>
+                    <button
+                      onClick={() => { if (window.confirm(`Excluir a localidade "${b.nome}" e todos os seus hotéis?`)) removerBase(b.id); }}
+                      aria-label="Excluir localidade"
+                      className="shrink-0 p-1.5 rounded-lg text-white/20 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
 
-                  <div className="mb-4">
-                    <div className="text-[10px] uppercase tracking-widest text-white/45 mb-1.5">
-                      Noites desta base (aparece no Roteiro)
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {estado.roteiro.map((d) => {
-                        const on = (b.diasIds || []).includes(d.id);
+                  {aberta && (
+                    <div className="mt-4 space-y-3">
+                      {(b.slots || []).map((sl) => {
+                        const on = sl.ativo;
+                        const local = totalLocal(sl);
+                        const usd = lancEmUSD({ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }, estado.cambio, estado.iof);
                         return (
-                          <button
-                            key={d.id}
-                            onClick={() => alternarDiaBase(b.id, d.id)}
-                            aria-pressed={on}
-                            title={`Dia ${d.n} · ${d.data}`}
-                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
-                              on ? "bg-cyan-400 text-slate-900" : "bg-white/[0.07] text-white/45 hover:bg-white/15"
+                          <div
+                            key={sl.id}
+                            className={`group rounded-xl border p-4 transition-all duration-300 ${
+                              on ? "bg-emerald-500/10 border-emerald-400/40" : "bg-white/[0.05] border-white/10"
                             }`}
                           >
-                            {d.n}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="grid lg:grid-cols-3 gap-3">
-                    {b.slots.map((sl, i) => {
-                      const ativo = b.escolhido === sl.id;
-                      const local = totalLocal(sl);
-                      return (
-                        <div
-                          key={sl.id}
-                          className={`rounded-xl border p-3.5 transition-all duration-300 ${
-                            ativo ? "bg-emerald-500/10 border-emerald-400/40" : "bg-white/[0.05] border-white/10 hover:bg-white/[0.09]"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] uppercase tracking-widest text-cyan-300/70">Opção {i + 1}</span>
-                            <button
-                              onClick={() => escolherSlot(b.id, sl.id)}
-                              aria-pressed={ativo}
-                              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
-                                ativo ? "bg-emerald-400 text-slate-900" : "bg-white/10 text-white/50 hover:bg-white/20"
-                              }`}
-                            >
-                              {ativo && <Check size={11} strokeWidth={3.5} />}
-                              {ativo ? "Escolhido" : "Escolher"}
-                            </button>
-                          </div>
-
-                          <div className="text-[15px] font-semibold mb-3 min-h-[24px]">
-                            <Editavel
-                              valor={sl.hotel || "Nome do hotel"}
-                              onChange={(v) => atualizarSlot(b.id, sl.id, "hotel", v)}
-                              className={sl.hotel ? "" : "text-white/30 italic"}
-                            />
-                          </div>
-
-                          <div className="flex gap-1.5 mb-3">
-                            {["diaria", "fechado"].map((m) => (
+                            <div className="flex items-start gap-3 mb-3">
                               <button
-                                key={m}
-                                onClick={() => atualizarSlot(b.id, sl.id, "modo", m)}
-                                className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-1.5 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
-                                  sl.modo === m ? "bg-white text-slate-900" : "bg-white/10 text-white/50 hover:bg-white/20"
+                                onClick={() => escolherSlot(b.id, sl.id)}
+                                aria-pressed={on}
+                                aria-label={on ? "Desativar reserva" : "Ativar reserva"}
+                                title={on ? "Reserva ativa — soma no total" : "Ative para somar no total"}
+                                className={`shrink-0 w-5 h-5 mt-1 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                                  on ? "bg-emerald-400 border-emerald-400" : "border-white/35 hover:border-white/70"
                                 }`}
                               >
-                                {m === "diaria" ? "Diária" : "Fechado"}
+                                {on && <Check size={13} className="text-slate-900" strokeWidth={3.5} />}
                               </button>
-                            ))}
-                            <select
-                              value={sl.moeda}
-                              onChange={(e) => atualizarSlot(b.id, sl.id, "moeda", e.target.value)}
-                              aria-label="Moeda"
-                              className="text-[10px] font-bold uppercase tracking-wider py-1.5 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
-                            >
-                              {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                          </div>
 
-                          <div className="space-y-1.5 text-sm">
-                            {sl.modo === "diaria" ? (
-                              <>
-                                {[["Diária", "diaria"], ["Noites", "noites"], ["Taxas", "taxas"]].map(([rot, campo]) => (
-                                  <div key={campo} className="flex items-center justify-between gap-2">
-                                    <span className="text-white/45 text-xs">{rot}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[15px] font-semibold">
+                                  <Editavel
+                                    valor={sl.hotel || "Nome do hotel"}
+                                    onChange={(v) => atualizarSlot(b.id, sl.id, "hotel", v)}
+                                    className={sl.hotel ? "" : "text-white/30 italic"}
+                                  />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                  {["diaria", "fechado"].map((m) => (
+                                    <button
+                                      key={m}
+                                      onClick={() => atualizarSlot(b.id, sl.id, "modo", m)}
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                                        sl.modo === m ? "bg-white text-slate-900" : "bg-white/10 text-white/50 hover:bg-white/20"
+                                      }`}
+                                    >
+                                      {m === "diaria" ? "Diária" : "Fechado"}
+                                    </button>
+                                  ))}
+                                  <select
+                                    value={sl.moeda}
+                                    onChange={(e) => atualizarSlot(b.id, sl.id, "moeda", e.target.value)}
+                                    aria-label="Moeda"
+                                    className="text-[10px] font-bold uppercase py-1 px-1.5 rounded-md bg-white/10 text-white/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-cyan-300/70 [&>option]:bg-slate-800"
+                                  >
+                                    {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <div className="text-base font-bold text-emerald-300 tabular-nums">US$ {fmtUSD(usd)}</div>
+                                <div className="text-[10px] text-white/35 tabular-nums">{MOEDAS[sl.moeda].rot} {fmt(local)}</div>
+                                <button
+                                  onClick={() => removerSlot(b.id, sl.id)}
+                                  aria-label="Excluir hotel"
+                                  className="mt-1 p-1.5 rounded-lg text-white/20 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                              <div className="space-y-1.5 text-sm">
+                                {sl.modo === "diaria" ? (
+                                  [["Diária", "diaria"], ["Noites", "noites"], ["Taxas", "taxas"]].map(([rot, campo]) => (
+                                    <div key={campo} className="flex items-center justify-between gap-2">
+                                      <span className="text-white/45 text-xs">{rot}</span>
+                                      <span className="tabular-nums font-semibold text-right">
+                                        <Editavel valor={sl[campo]} numero onChange={(v) => atualizarSlot(b.id, sl.id, campo, v)} />
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-white/45 text-xs">Valor total</span>
                                     <span className="tabular-nums font-semibold text-right">
-                                      <Editavel valor={sl[campo]} numero onChange={(v) => atualizarSlot(b.id, sl.id, campo, v)} />
+                                      <Editavel valor={sl.fechado} numero onChange={(v) => atualizarSlot(b.id, sl.id, "fechado", v)} />
                                     </span>
                                   </div>
-                                ))}
-                              </>
-                            ) : (
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-white/45 text-xs">Valor total</span>
-                                <span className="tabular-nums font-semibold text-right">
-                                  <Editavel valor={sl.fechado} numero onChange={(v) => atualizarSlot(b.id, sl.id, "fechado", v)} />
-                                </span>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] uppercase tracking-widest text-white/45 mb-1.5">
+                                  Noites desta reserva
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {estado.roteiro.map((d) => {
+                                    const marcado = (sl.diasIds || []).includes(d.id);
+                                    return (
+                                      <button
+                                        key={d.id}
+                                        onClick={() => alternarDiaSlot(b.id, sl.id, d.id)}
+                                        aria-pressed={marcado}
+                                        title={`Dia ${d.n} · ${d.data}`}
+                                        className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-cyan-300/70 ${
+                                          marcado ? "bg-cyan-400 text-slate-900" : "bg-white/[0.07] text-white/45 hover:bg-white/15"
+                                        }`}
+                                      >
+                                        {d.n}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            {on && (
+                              <div className="pt-3 border-t border-white/10">
+                                <Pagamento
+                                  l={{ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }}
+                                  aliquota={estado.iof}
+                                  compacto
+                                  onChange={(c, v) => atualizarLancSlot(b.id, sl.id, c, v)}
+                                />
                               </div>
                             )}
                           </div>
+                        );
+                      })}
 
-                          <div className="mt-3 pt-2.5 border-t border-white/10">
-                            <div className="flex items-baseline justify-between mb-2">
-                              <span className="text-xs text-white/45">{MOEDAS[sl.moeda].rot} {fmt(local, 0)}</span>
-                              <span className="text-base font-bold text-emerald-300 tabular-nums">
-                                US$ {fmt(lancEmUSD({ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }, estado.cambio, estado.iof))}
-                              </span>
-                            </div>
-                            {ativo && (
-                              <Pagamento
-                                l={{ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }}
-                                aliquota={estado.iof}
-                                compacto
-                                onChange={(c, v) => atualizarLancSlot(b.id, sl.id, c, v)}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                      <button
+                        onClick={() => adicionarSlot(b.id)}
+                        className="flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200 px-3 py-2 rounded-lg hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-300/70"
+                      >
+                        <Plus size={15} /> Adicionar hotel
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
