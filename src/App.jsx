@@ -371,7 +371,7 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
               title={st.desc}
               aria-pressed={on}
               className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
-                on ? `${c.bg} ${c.bd} ${c.txt}` : "bg-[#fbebd9]/5 border-[#fbebd9]/10 text-[#fbebd9]/40 hover:bg-[#fbebd9]/10"
+                on ? `${c.bg} ${c.bd} ${c.txt}` : "bg-[#fbebd9]/5 border-[#fbebd9]/10 text-[#fbebd9]/55 hover:bg-[#fbebd9]/10"
               }`}
             >
               {compacto ? st.curto : st.rot}
@@ -387,7 +387,7 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
             onClick={() => onChange("pagamento", k)}
             aria-pressed={dado.pagamento === k}
             className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
-              dado.pagamento === k ? "bg-[#fbebd9]/20 text-[#fbebd9]" : "bg-[#fbebd9]/5 text-[#fbebd9]/40 hover:bg-[#fbebd9]/10"
+              dado.pagamento === k ? "bg-[#fbebd9]/20 text-[#fbebd9]" : "bg-[#fbebd9]/5 text-[#fbebd9]/55 hover:bg-[#fbebd9]/10"
             }`}
           >
             {p.rot}
@@ -400,7 +400,7 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
             aria-pressed={!dado.iofIsento}
             title={dado.iofIsento ? "IOF isento neste item" : `IOF de ${aliquota}% aplicado`}
             className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
-              temIOF ? "bg-rose-500/15 text-rose-300" : "bg-[#fbebd9]/5 text-[#fbebd9]/30 line-through"
+              temIOF ? "bg-rose-500/15 text-rose-300" : "bg-[#fbebd9]/5 text-[#fbebd9]/50 line-through"
             }`}
           >
             IOF
@@ -715,77 +715,75 @@ export default function App() {
     if (window.confirm("Restaurar tudo ao estado original? Roteiro, custos, hospedagens e checklist serão zerados.")) setEstado(migrar(ESTADO_INICIAL));
   };
 
-  const vidro = "backdrop-blur-2xl bg-[#fbebd9]/[0.06] border border-[#fbebd9]/15 shadow-[0_8px_40px_rgba(0,0,0,0.5)]";
+  const vidro = "backdrop-blur-2xl bg-[#150f1e]/70 border border-[#fbebd9]/12 shadow-[0_8px_40px_rgba(0,0,0,0.55)]";
 
   return (
     <div className="relative min-h-screen w-full font-sans text-[#fbebd9] overflow-x-hidden">
-      {/* Fundos cênicos em crossfade */}
+      {/* Fundos cênicos em crossfade — discretos, para não competir com o conteúdo */}
       {FUNDOS.map((url, i) => (
         <div
           key={url}
           aria-hidden="true"
           className="fixed inset-0 bg-cover bg-center transition-opacity duration-[2500ms] ease-in-out"
-          style={{ backgroundImage: `url('${url}')`, opacity: i === fundo ? 1 : 0 }}
+          style={{ backgroundImage: `url('${url}')`, opacity: i === fundo ? 0.3 : 0 }}
         />
       ))}
-      <div className="fixed inset-0 bg-gradient-to-b from-[#0d0b14]/88 via-[#140d1c]/80 to-[#0a0710]/94" />
+      <div className="fixed inset-0 bg-gradient-to-b from-[#0d0b14]/75 via-[#140d1c]/82 to-[#0a0710]/92" />
 
-      {/* Hero — imagem no topo dissolvendo no fundo */}
-      <div className="relative z-10">
-        <div className="relative h-[38vh] min-h-[240px] max-h-[420px] w-full overflow-hidden">
+      {/* Hero — imagem inteira, dissolvendo nas bordas */}
+      <div className="relative z-10 pointer-events-none">
+        <div className="relative w-full max-w-4xl mx-auto">
           <img
             src="/hero.jpg"
             alt=""
             aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover object-center"
+            className="w-full h-auto object-contain"
+            style={{
+              WebkitMaskImage:
+                "radial-gradient(118% 90% at 50% 34%, #000 40%, rgba(0,0,0,0.72) 60%, transparent 88%)",
+              maskImage:
+                "radial-gradient(118% 90% at 50% 34%, #000 40%, rgba(0,0,0,0.72) 60%, transparent 88%)",
+            }}
           />
-          {/* degradê que funde a imagem no fundo do site */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0d0b14]/25 to-[#0d0b14]" />
-          <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#0d0b14] via-[#0d0b14]/60 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#0d0b14] via-[#0d0b14]/50 to-transparent" />
+        </div>
 
-          {/* Títulos sobre o hero */}
-          <div className="absolute inset-x-0 bottom-0 max-w-5xl mx-auto px-4 sm:px-6 pb-5">
-            <div className="flex items-end justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.3em] text-pink-300/80 mb-1">
-                  Kooka Planner
-                </div>
-                <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-none drop-shadow-[0_4px_20px_rgba(0,0,0,0.7)]">
-                  Patagônia
-                </h1>
+        {/* Títulos sobre o hero */}
+        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 -mt-14 sm:-mt-24">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.3em] text-pink-300/80 mb-1">
+                Kooka Planner
               </div>
-              <div
-                title={
-                  sinc === "erro" ? `Erro: ${erroSinc}`
-                  : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
-                  : "Sincronizado entre seus aparelhos"
-                }
-                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 backdrop-blur-md ${
-                  sinc === "ok" ? "text-pink-300 border-pink-400/30 bg-pink-500/15"
-                  : sinc === "erro" ? "text-rose-300 border-rose-400/30 bg-rose-500/15"
-                  : sinc === "local" ? "text-[#fbebd9]/50 border-[#fbebd9]/15 bg-[#fbebd9]/10"
-                  : "text-fuchsia-300 border-fuchsia-400/30 bg-fuchsia-500/15"
-                }`}
-              >
-                {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
-                {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
-                {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
-                {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
-                {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
-              </div>
+              <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-none drop-shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
+                Patagônia
+              </h1>
+            </div>
+            <div
+              title={
+                sinc === "erro" ? `Erro: ${erroSinc}`
+                : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
+                : "Sincronizado entre seus aparelhos"
+              }
+              className={`pointer-events-auto flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 backdrop-blur-md ${
+                sinc === "ok" ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/15"
+                : sinc === "erro" ? "text-rose-300 border-rose-400/40 bg-rose-500/15"
+                : sinc === "local" ? "text-[#fbebd9]/50 border-[#fbebd9]/15 bg-[#fbebd9]/10"
+                : "text-fuchsia-300 border-fuchsia-400/40 bg-fuchsia-500/15"
+              }`}
+            >
+              {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
+              {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
+              {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
+              {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
+              {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pb-8 sm:pb-12">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-8 sm:pb-12">
 
-        {/* Cabeçalho */}
-        <header className="mb-6">
-          <p className="text-[#fbebd9]/55 text-sm">
-            06 – 17 de dezembro · 2 adultos + 1 criança · Argentina e Chile
-          </p>
-        </header>
 
         {/* Resumo */}
         <div className={`${vidro} rounded-2xl p-5 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4`}>
@@ -796,7 +794,7 @@ export default function App() {
             { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-pink-300" : "text-rose-300" },
           ].map((k, i) => (
             <div key={i}>
-              <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/45 mb-1">{k.rot}</div>
+              <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/55 mb-1">{k.rot}</div>
               <div className={`text-lg font-bold ${k.cor || ""}`}>{k.val}</div>
             </div>
           ))}
@@ -808,7 +806,7 @@ export default function App() {
                 style={{ width: `${Math.max(0, pct - pctPago)}%` }}
               />
             </div>
-            <div className="flex justify-between mt-1.5 text-[10px] text-[#fbebd9]/40">
+            <div className="flex justify-between mt-1.5 text-[10px] text-[#fbebd9]/50">
               <span>Orçamento <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /></span>
               {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: US$ {fmt(fin.iof)}</span>}
             </div>
@@ -866,11 +864,11 @@ export default function App() {
                   title="Editar na aba Custos"
                   className="text-right shrink-0 rounded-lg px-2 py-1 -mr-2 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                 >
-                  <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/45">Custo do dia</div>
+                  <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/55">Custo do dia</div>
                   <div className="text-xl font-bold text-pink-300 tabular-nums">
                     US$ {fmtUSD(custoPorDia[dia.id] || 0)}
                   </div>
-                  <div className="text-[10px] text-[#fbebd9]/35">editar em Custos →</div>
+                  <div className="text-[10px] text-[#fbebd9]/55">editar em Custos →</div>
                 </button>
               </div>
 
@@ -905,7 +903,7 @@ export default function App() {
                             onChange={(v) => atualizarAtiv(dia.id, a.id, "hora", v)}
                           />
                         </div>
-                        <Icone size={15} className="text-[#fbebd9]/35" />
+                        <Icone size={15} className="text-[#fbebd9]/55" />
                       </div>
                       <p className="flex-1 text-[15px] leading-relaxed text-[#fbebd9]/85 pt-0.5">
                         <Editavel valor={a.texto} multiline onChange={(v) => atualizarAtiv(dia.id, a.id, "texto", v)} />
@@ -913,7 +911,7 @@ export default function App() {
                       <button
                         onClick={() => removerAtiv(dia.id, a.id)}
                         aria-label="Remover atividade"
-                        className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                        className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -967,7 +965,7 @@ export default function App() {
                   {!abrirFin && (
                     <span className="text-sm tabular-nums">
                       <span className="text-pink-300 font-bold">US$ {fmt(fin.pago)}</span>
-                      <span className="text-[#fbebd9]/30 mx-1">·</span>
+                      <span className="text-[#fbebd9]/50 mx-1">·</span>
                       <span className="text-orange-300 font-bold">US$ {fmt(fin.pendente)}</span>
                     </span>
                   )}
@@ -986,7 +984,7 @@ export default function App() {
                     <div key={k} className={`rounded-xl border p-3.5 ${c.bg} ${c.bd}`}>
                       <div className={`text-[10px] uppercase tracking-widest mb-1 ${c.txt}`}>{st.rot}</div>
                       <div className="text-xl font-bold tabular-nums">US$ {fmt(v)}</div>
-                      <div className="text-[10px] text-[#fbebd9]/35 mt-0.5">{n} {n === 1 ? "item" : "itens"}</div>
+                      <div className="text-[10px] text-[#fbebd9]/50 mt-0.5">{n} {n === 1 ? "item" : "itens"}</div>
                     </div>
                   );
                 })}
@@ -1001,15 +999,15 @@ export default function App() {
                   <span className="text-orange-300 font-semibold">Gasto alocado pendente</span>
                   <span className="tabular-nums font-bold text-orange-300">US$ {fmt(fin.pendente)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/40 pl-3">
+                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/55 pl-3">
                   <span>· na fatura antes da viagem</span>
                   <span className="tabular-nums">US$ {fmt(fin.faturar)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/40 pl-3">
+                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/55 pl-3">
                   <span>· a pagar na chegada</span>
                   <span className="tabular-nums">US$ {fmt(fin.chegada)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/40 pl-3">
+                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/55 pl-3">
                   <span>· ainda sem reserva</span>
                   <span className="tabular-nums">US$ {fmt(fin.aberto)}</span>
                 </div>
@@ -1026,13 +1024,13 @@ export default function App() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-[#fbebd9]/10 flex items-center justify-between gap-3">
-                <div className="text-xs text-[#fbebd9]/45">
+                <div className="text-xs text-[#fbebd9]/55">
                   Alíquota do IOF{" "}
                   <span className="font-bold text-[#fbebd9]/80">
                     <Editavel valor={estado.iof} numero onChange={(v) => setEstado((s) => ({ ...s, iof: v }))} />%
                   </span>
                 </div>
-                <div className="text-xs text-[#fbebd9]/35 text-right">
+                <div className="text-xs text-[#fbebd9]/50 text-right">
                   Passeios US$ {fmt(totalRoteiro)} · Hospedagem US$ {fmt(totalHosp)}
                 </div>
               </div>
@@ -1050,7 +1048,7 @@ export default function App() {
                 <h2 className="text-xl font-bold">Câmbio</h2>
                 <div className="flex items-center gap-3 shrink-0">
                   {!abrirCambio && (
-                    <span className="text-xs text-[#fbebd9]/45 tabular-nums hidden sm:inline">
+                    <span className="text-xs text-[#fbebd9]/55 tabular-nums hidden sm:inline">
                       R$ {fmt(1 / (estado.cambio.BRL || 1), 2)}/US$
                     </span>
                   )}
@@ -1061,7 +1059,7 @@ export default function App() {
               {abrirCambio && (
                 <div className="mt-4">
                   <div className="flex items-center justify-between gap-3 mb-4">
-                    <p className="text-xs text-[#fbebd9]/45 leading-relaxed">
+                    <p className="text-xs text-[#fbebd9]/55 leading-relaxed">
                       Quanto vale 1 unidade da moeda em dólar. Atualiza sozinho uma vez por dia; dá para ajustar à mão se estiver sem internet.
                     </p>
                     <button
@@ -1079,13 +1077,13 @@ export default function App() {
                       <div key={cod} className="rounded-xl bg-[#fbebd9]/[0.05] border border-[#fbebd9]/10 p-3">
                         <div className="text-[10px] uppercase tracking-widest text-fuchsia-300/70 mb-1">{cod} · {m.nome}</div>
                         {cod === "USD" ? (
-                          <div className="text-sm font-semibold text-[#fbebd9]/40">1,00 (base)</div>
+                          <div className="text-sm font-semibold text-[#fbebd9]/50">1,00 (base)</div>
                         ) : (
                           <>
                             <div className="text-sm font-semibold tabular-nums">
                               <Editavel valor={estado.cambio[cod]} numero onChange={(v) => atualizarCambio(cod, v)} />
                             </div>
-                            <div className="text-[10px] text-[#fbebd9]/35 mt-0.5 tabular-nums">
+                            <div className="text-[10px] text-[#fbebd9]/50 mt-0.5 tabular-nums">
                               {fmt(1 / (estado.cambio[cod] || 1), 2)} por US$ 1
                             </div>
                           </>
@@ -1094,7 +1092,7 @@ export default function App() {
                     ))}
                   </div>
 
-                  <div className="mt-3 flex items-baseline justify-between gap-3 text-[11px] text-[#fbebd9]/35">
+                  <div className="mt-3 flex items-baseline justify-between gap-3 text-[11px] text-[#fbebd9]/55">
                     <span>
                       {estado.cambioAtualizadoEm
                         ? `Atualizado em ${new Date(estado.cambioAtualizadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
@@ -1121,7 +1119,7 @@ export default function App() {
               </p>
 
               {(estado.custos || []).length === 0 && (
-                <p className="text-sm text-[#fbebd9]/30 italic py-4 text-center">
+                <p className="text-sm text-[#fbebd9]/50 italic py-4 text-center">
                   Nenhuma ficha ainda. Use o botão de um dos dias abaixo para começar.
                 </p>
               )}
@@ -1138,8 +1136,8 @@ export default function App() {
                           <span className="text-sm font-black shrink-0">
                             {d ? `Dia ${d.n}` : "Sem dia"}
                           </span>
-                          {d && <span className="text-[11px] text-[#fbebd9]/40 shrink-0">{d.data}</span>}
-                          {d && <span className="text-[11px] text-[#fbebd9]/40 truncate hidden sm:inline">· {d.titulo}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/55 shrink-0">{d.data}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/55 truncate hidden sm:inline">· {d.titulo}</span>}
                         </div>
                         <div className="flex-1 border-t border-[#fbebd9]/10" />
                         {subtotal > 0 && (
@@ -1160,7 +1158,7 @@ export default function App() {
                       </div>
 
                       {fichas.length === 0 ? (
-                        <p className="text-xs text-[#fbebd9]/25 italic pl-1">Sem lançamentos.</p>
+                        <p className="text-xs text-[#fbebd9]/45 italic pl-1">Sem lançamentos.</p>
                       ) : (
                         <ul className="space-y-2.5">
                           {fichas.map((c) => {
@@ -1205,7 +1203,7 @@ export default function App() {
                                     <button
                                       onClick={() => removerCusto(c.id)}
                                       aria-label="Excluir ficha"
-                                      className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                      className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                                     >
                                       <Trash2 size={14} />
                                     </button>
@@ -1259,10 +1257,10 @@ export default function App() {
                   );
                 })}
               </ul>
-              <p className="mt-4 text-xs text-[#fbebd9]/40 leading-relaxed">
+              <p className="mt-4 text-xs text-[#fbebd9]/55 leading-relaxed">
                 Não inclui passagens aéreas. A hospedagem soma apenas as reservas ativas.
               </p>
-              <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-[#fbebd9]/40 hover:text-[#fbebd9]/80 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded px-1">
+              <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-[#fbebd9]/55 hover:text-[#fbebd9]/80 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded px-1">
                 <RotateCcw size={12} /> Restaurar tudo ao original
               </button>
             </div>
@@ -1274,14 +1272,14 @@ export default function App() {
           <div className={`${vidro} rounded-2xl p-6`}>
             <div className="flex items-baseline justify-between gap-3 mb-1">
               <h2 className="text-xl font-bold">Antes de viajar</h2>
-              <span className="text-sm text-[#fbebd9]/45 tabular-nums shrink-0">{feitos}/{estado.alertas.length}</span>
+              <span className="text-sm text-[#fbebd9]/55 tabular-nums shrink-0">{feitos}/{estado.alertas.length}</span>
             </div>
             <p className="text-sm text-[#fbebd9]/50 mb-6">
               Clique no texto para editar. O sino marca as pendências críticas.
             </p>
 
             {estado.alertas.length === 0 && (
-              <p className="text-sm text-[#fbebd9]/30 italic py-6 text-center">
+              <p className="text-sm text-[#fbebd9]/50 italic py-6 text-center">
                 Nenhuma pendência. Use o botão abaixo para adicionar.
               </p>
             )}
@@ -1309,7 +1307,7 @@ export default function App() {
                     {a.feito && <Check size={13} className="text-[#0d0b14]" strokeWidth={3.5} />}
                   </button>
 
-                  <div className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-[#fbebd9]/35" : "text-[#fbebd9]/85"}`}>
+                  <div className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-[#fbebd9]/55" : "text-[#fbebd9]/85"}`}>
                     <Editavel valor={a.texto} multiline onChange={(v) => atualizarAlerta(a.id, "texto", v)} />
                   </div>
 
@@ -1321,7 +1319,7 @@ export default function App() {
                     className={`shrink-0 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
                       a.critico
                         ? "text-orange-300 hover:bg-orange-500/15"
-                        : "text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-orange-300 hover:bg-orange-500/15"
+                        : "text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-orange-300 hover:bg-orange-500/15"
                     }`}
                   >
                     <AlertTriangle size={15} />
@@ -1330,7 +1328,7 @@ export default function App() {
                   <button
                     onClick={() => removerAlerta(a.id)}
                     aria-label="Excluir pendência"
-                    className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                    className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -1390,14 +1388,14 @@ export default function App() {
                       {totalBase > 0 && (
                         <div className="text-sm font-bold text-pink-300 tabular-nums">US$ {fmtUSD(totalBase)}</div>
                       )}
-                      <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/40">
+                      <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/50">
                         {ativos.length ? `${ativos.length} ${ativos.length === 1 ? "reserva" : "reservas"}` : "sem reserva"}
                       </div>
                     </div>
                     <button
                       onClick={() => { if (window.confirm(`Excluir a localidade "${b.nome}" e todos os seus hotéis?`)) removerBase(b.id); }}
                       aria-label="Excluir localidade"
-                      className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/20 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                      className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -1434,7 +1432,7 @@ export default function App() {
                                   <Editavel
                                     valor={sl.hotel || "Nome do hotel"}
                                     onChange={(v) => atualizarSlot(b.id, sl.id, "hotel", v)}
-                                    className={sl.hotel ? "" : "text-[#fbebd9]/30 italic"}
+                                    className={sl.hotel ? "" : "text-[#fbebd9]/50 italic"}
                                   />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1462,11 +1460,11 @@ export default function App() {
 
                               <div className="text-right shrink-0">
                                 <div className="text-base font-bold text-pink-300 tabular-nums">US$ {fmtUSD(usd)}</div>
-                                <div className="text-[10px] text-[#fbebd9]/35 tabular-nums">{MOEDAS[sl.moeda].rot} {fmt(local)}</div>
+                                <div className="text-[10px] text-[#fbebd9]/50 tabular-nums">{MOEDAS[sl.moeda].rot} {fmt(local)}</div>
                                 <button
                                   onClick={() => removerSlot(b.id, sl.id)}
                                   aria-label="Excluir hotel"
-                                  className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/20 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                  className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                                 >
                                   <Trash2 size={13} />
                                 </button>
@@ -1478,7 +1476,7 @@ export default function App() {
                                 {sl.modo === "diaria" ? (
                                   [["Diária", "diaria"], ["Noites", "noites"], ["Taxas", "taxas"]].map(([rot, campo]) => (
                                     <div key={campo} className="flex items-center justify-between gap-2">
-                                      <span className="text-[#fbebd9]/45 text-xs">{rot}</span>
+                                      <span className="text-[#fbebd9]/55 text-xs">{rot}</span>
                                       <span className="tabular-nums font-semibold text-right">
                                         <Editavel valor={sl[campo]} numero onChange={(v) => atualizarSlot(b.id, sl.id, campo, v)} />
                                       </span>
@@ -1486,7 +1484,7 @@ export default function App() {
                                   ))
                                 ) : (
                                   <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[#fbebd9]/45 text-xs">Valor total</span>
+                                    <span className="text-[#fbebd9]/55 text-xs">Valor total</span>
                                     <span className="tabular-nums font-semibold text-right">
                                       <Editavel valor={sl.fechado} numero onChange={(v) => atualizarSlot(b.id, sl.id, "fechado", v)} />
                                     </span>
@@ -1495,7 +1493,7 @@ export default function App() {
                               </div>
 
                               <div>
-                                <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/45 mb-1.5">
+                                <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/55 mb-1.5">
                                   Noites desta reserva
                                 </div>
                                 <div className="flex flex-wrap gap-1">
@@ -1508,7 +1506,7 @@ export default function App() {
                                         aria-pressed={marcado}
                                         title={`Dia ${d.n} · ${d.data}`}
                                         className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
-                                          marcado ? "bg-fuchsia-400 text-[#0d0b14]" : "bg-[#fbebd9]/[0.07] text-[#fbebd9]/45 hover:bg-[#fbebd9]/15"
+                                          marcado ? "bg-fuchsia-400 text-[#0d0b14]" : "bg-[#fbebd9]/[0.07] text-[#fbebd9]/55 hover:bg-[#fbebd9]/15"
                                         }`}
                                       >
                                         {d.n}
@@ -1547,7 +1545,7 @@ export default function App() {
           </div>
         )}
 
-        <footer className="mt-8 text-center text-[11px] text-[#fbebd9]/30">
+        <footer className="mt-8 text-center text-[11px] text-[#fbebd9]/50">
           {configurado
             ? `Sincronizado na nuvem · ${ID_VIAGEM}`
             : "Salvo apenas neste navegador — configure a sincronização para usar em outros aparelhos."}
