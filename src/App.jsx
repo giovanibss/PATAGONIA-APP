@@ -41,10 +41,10 @@ const PAGAMENTOS = {
 };
 
 const CORES = {
-  emerald: { txt: "text-teal-300", bg: "bg-teal-500/10", bd: "border-teal-400/30", solid: "bg-teal-400" },
-  amber:   { txt: "text-amber-300",   bg: "bg-amber-500/10",   bd: "border-amber-400/30",   solid: "bg-amber-400" },
-  sky:     { txt: "text-blue-300",     bg: "bg-blue-500/10",     bd: "border-blue-400/30",     solid: "bg-blue-400" },
-  slate:   { txt: "text-stone-300/50", bg: "bg-stone-300/5", bd: "border-stone-300/15", solid: "bg-stone-300/40" },
+  emerald: { txt: "text-pink-300", bg: "bg-pink-500/10", bd: "border-pink-400/30", solid: "bg-pink-400" },
+  amber:   { txt: "text-orange-300", bg: "bg-orange-500/10", bd: "border-orange-400/30", solid: "bg-orange-400" },
+  sky:     { txt: "text-violet-300",     bg: "bg-violet-500/10",     bd: "border-violet-400/30",     solid: "bg-violet-400" },
+  slate:   { txt: "text-zinc-300/50", bg: "bg-zinc-300/5", bd: "border-zinc-300/15", solid: "bg-zinc-300/40" },
 };
 
 /* Lançamento padrão. Todo custo — de dia ou de hotel — vira um destes. */
@@ -330,7 +330,7 @@ function Editavel({ valor, onChange, className = "", numero = false, prefixo = "
           if (e.key === "Enter" && !multiline) salvar();
           if (e.key === "Escape") { setRascunho(String(valor)); setEditando(false); }
         }}
-        className={`${className} w-full bg-[#f2e8dd]/15 border border-orange-300/60 rounded-md px-2 py-1 outline-none resize-none text-[#f2e8dd] placeholder-[#f2e8dd]/40`}
+        className={`${className} w-full bg-[#fbebd9]/15 border border-fuchsia-300/60 rounded-md px-2 py-1 outline-none resize-none text-[#fbebd9] placeholder-[#fbebd9]/40`}
       />
     );
   }
@@ -341,7 +341,7 @@ function Editavel({ valor, onChange, className = "", numero = false, prefixo = "
       tabIndex={0}
       role="button"
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditando(true); } }}
-      className={`${className} group/ed inline-flex items-start gap-1.5 cursor-text rounded-md px-1 -mx-1 transition-colors hover:bg-[#f2e8dd]/10 focus:outline-none focus:ring-2 focus:ring-orange-300/70`}
+      className={`${className} group/ed inline-flex items-start gap-1.5 cursor-text rounded-md px-1 -mx-1 transition-colors hover:bg-[#fbebd9]/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70`}
       title="Clique para editar"
     >
       {prefixo}{valor}
@@ -370,8 +370,8 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
               onClick={() => onChange("status", k)}
               title={st.desc}
               aria-pressed={on}
-              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-                on ? `${c.bg} ${c.bd} ${c.txt}` : "bg-[#f2e8dd]/5 border-[#f2e8dd]/10 text-[#f2e8dd]/40 hover:bg-[#f2e8dd]/10"
+              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                on ? `${c.bg} ${c.bd} ${c.txt}` : "bg-[#fbebd9]/5 border-[#fbebd9]/10 text-[#fbebd9]/40 hover:bg-[#fbebd9]/10"
               }`}
             >
               {compacto ? st.curto : st.rot}
@@ -386,8 +386,8 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
             key={k}
             onClick={() => onChange("pagamento", k)}
             aria-pressed={dado.pagamento === k}
-            className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-              dado.pagamento === k ? "bg-[#f2e8dd]/20 text-[#f2e8dd]" : "bg-[#f2e8dd]/5 text-[#f2e8dd]/40 hover:bg-[#f2e8dd]/10"
+            className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+              dado.pagamento === k ? "bg-[#fbebd9]/20 text-[#fbebd9]" : "bg-[#fbebd9]/5 text-[#fbebd9]/40 hover:bg-[#fbebd9]/10"
             }`}
           >
             {p.rot}
@@ -399,8 +399,8 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
             onClick={() => onChange("iofIsento", !dado.iofIsento)}
             aria-pressed={!dado.iofIsento}
             title={dado.iofIsento ? "IOF isento neste item" : `IOF de ${aliquota}% aplicado`}
-            className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-              temIOF ? "bg-rose-500/15 text-rose-300" : "bg-[#f2e8dd]/5 text-[#f2e8dd]/30 line-through"
+            className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+              temIOF ? "bg-rose-500/15 text-rose-300" : "bg-[#fbebd9]/5 text-[#fbebd9]/30 line-through"
             }`}
           >
             IOF
@@ -715,10 +715,10 @@ export default function App() {
     if (window.confirm("Restaurar tudo ao estado original? Roteiro, custos, hospedagens e checklist serão zerados.")) setEstado(migrar(ESTADO_INICIAL));
   };
 
-  const vidro = "backdrop-blur-2xl bg-[#f2e8dd]/[0.06] border border-[#f2e8dd]/15 shadow-[0_8px_40px_rgba(0,0,0,0.5)]";
+  const vidro = "backdrop-blur-2xl bg-[#fbebd9]/[0.06] border border-[#fbebd9]/15 shadow-[0_8px_40px_rgba(0,0,0,0.5)]";
 
   return (
-    <div className="relative min-h-screen w-full font-sans text-[#f2e8dd] overflow-x-hidden">
+    <div className="relative min-h-screen w-full font-sans text-[#fbebd9] overflow-x-hidden">
       {/* Fundos cênicos em crossfade */}
       {FUNDOS.map((url, i) => (
         <div
@@ -728,41 +728,61 @@ export default function App() {
           style={{ backgroundImage: `url('${url}')`, opacity: i === fundo ? 1 : 0 }}
         />
       ))}
-      <div className="fixed inset-0 bg-gradient-to-b from-[#04161a]/85 via-[#062024]/75 to-[#03110f]/92" />
+      <div className="fixed inset-0 bg-gradient-to-b from-[#0d0b14]/88 via-[#140d1c]/80 to-[#0a0710]/94" />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      {/* Hero — imagem no topo dissolvendo no fundo */}
+      <div className="relative z-10">
+        <div className="relative h-[38vh] min-h-[240px] max-h-[420px] w-full overflow-hidden">
+          <img
+            src="/hero.jpg"
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover object-center"
+          />
+          {/* degradê que funde a imagem no fundo do site */}
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0d0b14]/25 to-[#0d0b14]" />
+          <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#0d0b14] via-[#0d0b14]/60 to-transparent" />
+
+          {/* Títulos sobre o hero */}
+          <div className="absolute inset-x-0 bottom-0 max-w-5xl mx-auto px-4 sm:px-6 pb-5">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.3em] text-pink-300/80 mb-1">
+                  Kooka Planner
+                </div>
+                <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-none drop-shadow-[0_4px_20px_rgba(0,0,0,0.7)]">
+                  Patagônia
+                </h1>
+              </div>
+              <div
+                title={
+                  sinc === "erro" ? `Erro: ${erroSinc}`
+                  : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
+                  : "Sincronizado entre seus aparelhos"
+                }
+                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 backdrop-blur-md ${
+                  sinc === "ok" ? "text-pink-300 border-pink-400/30 bg-pink-500/15"
+                  : sinc === "erro" ? "text-rose-300 border-rose-400/30 bg-rose-500/15"
+                  : sinc === "local" ? "text-[#fbebd9]/50 border-[#fbebd9]/15 bg-[#fbebd9]/10"
+                  : "text-fuchsia-300 border-fuchsia-400/30 bg-fuchsia-500/15"
+                }`}
+              >
+                {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
+                {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
+                {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
+                {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
+                {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pb-8 sm:pb-12">
 
         {/* Cabeçalho */}
         <header className="mb-6">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <img
-              src="/logo.png"
-              alt="Patagônia App"
-              width={880}
-              height={574}
-              className="w-44 sm:w-56 h-auto drop-shadow-[0_8px_24px_rgba(0,0,0,0.55)]"
-            />
-            <div
-              title={
-                sinc === "erro" ? `Erro: ${erroSinc}`
-                : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
-                : "Sincronizado entre seus aparelhos"
-              }
-              className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 mt-1 ${
-                sinc === "ok" ? "text-teal-300 border-teal-400/30 bg-teal-500/10"
-                : sinc === "erro" ? "text-rose-300 border-rose-400/30 bg-rose-500/10"
-                : sinc === "local" ? "text-stone-300/50 border-stone-300/15 bg-stone-300/5"
-                : "text-orange-300 border-orange-400/30 bg-orange-500/10"
-              }`}
-            >
-              {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
-              {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
-              {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
-              {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
-              {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
-            </div>
-          </div>
-          <p className="text-stone-300/60 text-sm">
+          <p className="text-[#fbebd9]/55 text-sm">
             06 – 17 de dezembro · 2 adultos + 1 criança · Argentina e Chile
           </p>
         </header>
@@ -770,25 +790,25 @@ export default function App() {
         {/* Resumo */}
         <div className={`${vidro} rounded-2xl p-5 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4`}>
           {[
-            { rot: "Já pago", val: `US$ ${fmt(fin.pago)}`, cor: "text-teal-300" },
-            { rot: "A pagar", val: `US$ ${fmt(fin.pendente)}`, cor: "text-amber-300" },
+            { rot: "Já pago", val: `US$ ${fmt(fin.pago)}`, cor: "text-pink-300" },
+            { rot: "A pagar", val: `US$ ${fmt(fin.pendente)}`, cor: "text-orange-300" },
             { rot: "Total", val: `US$ ${fmt(total)}` },
-            { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-teal-300" : "text-rose-300" },
+            { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-pink-300" : "text-rose-300" },
           ].map((k, i) => (
             <div key={i}>
-              <div className="text-[10px] uppercase tracking-widest text-[#f2e8dd]/45 mb-1">{k.rot}</div>
+              <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/45 mb-1">{k.rot}</div>
               <div className={`text-lg font-bold ${k.cor || ""}`}>{k.val}</div>
             </div>
           ))}
           <div className="col-span-2 sm:col-span-4">
-            <div className="h-2 rounded-full bg-[#f2e8dd]/10 overflow-hidden flex">
-              <div className="h-full bg-teal-400 transition-all duration-700" style={{ width: `${pctPago}%` }} />
+            <div className="h-2 rounded-full bg-[#fbebd9]/10 overflow-hidden flex">
+              <div className="h-full bg-pink-400 transition-all duration-700" style={{ width: `${pctPago}%` }} />
               <div
-                className={`h-full transition-all duration-700 ${restante >= 0 ? "bg-amber-400/70" : "bg-rose-500"}`}
+                className={`h-full transition-all duration-700 ${restante >= 0 ? "bg-orange-400/70" : "bg-rose-500"}`}
                 style={{ width: `${Math.max(0, pct - pctPago)}%` }}
               />
             </div>
-            <div className="flex justify-between mt-1.5 text-[10px] text-[#f2e8dd]/40">
+            <div className="flex justify-between mt-1.5 text-[10px] text-[#fbebd9]/40">
               <span>Orçamento <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /></span>
               {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: US$ {fmt(fin.iof)}</span>}
             </div>
@@ -806,8 +826,8 @@ export default function App() {
             <button
               key={id}
               onClick={() => setAba(id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-                aba === id ? "bg-[#f2e8dd] text-[#04161a] shadow-lg" : "text-[#f2e8dd]/65 hover:bg-[#f2e8dd]/10"
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                aba === id ? "bg-[#fbebd9] text-[#0d0b14] shadow-lg" : "text-[#fbebd9]/65 hover:bg-[#fbebd9]/10"
               }`}
             >
               <Icone size={15} /> <span className="hidden sm:inline">{rot}</span>
@@ -823,10 +843,10 @@ export default function App() {
                 <button
                   key={d.id}
                   onClick={() => setAtivo(i)}
-                  className={`shrink-0 w-16 py-2.5 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
+                  className={`shrink-0 w-16 py-2.5 rounded-xl border transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
                     i === ativo
-                      ? "bg-[#f2e8dd] text-[#04161a] border-[#f2e8dd] -translate-y-1 shadow-xl"
-                      : "bg-[#f2e8dd]/[0.07] border-[#f2e8dd]/15 text-[#f2e8dd]/70 hover:bg-[#f2e8dd]/15 hover:-translate-y-0.5"
+                      ? "bg-[#fbebd9] text-[#0d0b14] border-[#fbebd9] -translate-y-1 shadow-xl"
+                      : "bg-[#fbebd9]/[0.07] border-[#fbebd9]/15 text-[#fbebd9]/70 hover:bg-[#fbebd9]/15 hover:-translate-y-0.5"
                   }`}
                 >
                   <div className="text-[9px] uppercase tracking-widest opacity-60">Dia</div>
@@ -838,25 +858,25 @@ export default function App() {
 
             <article className={`${vidro} rounded-2xl p-6`}>
               <div className="flex items-start justify-between gap-4 mb-1">
-                <div className="flex items-center gap-2 text-orange-300 text-[11px] font-bold uppercase tracking-[0.2em]">
+                <div className="flex items-center gap-2 text-fuchsia-300 text-[11px] font-bold uppercase tracking-[0.2em]">
                   <MapPin size={13} /> <Editavel valor={dia.base} onChange={(v) => atualizarDia(dia.id, "base", v)} />
                 </div>
                 <button
                   onClick={() => setAba("custos")}
                   title="Editar na aba Custos"
-                  className="text-right shrink-0 rounded-lg px-2 py-1 -mr-2 hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                  className="text-right shrink-0 rounded-lg px-2 py-1 -mr-2 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                 >
-                  <div className="text-[10px] uppercase tracking-widest text-[#f2e8dd]/45">Custo do dia</div>
-                  <div className="text-xl font-bold text-teal-300 tabular-nums">
+                  <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/45">Custo do dia</div>
+                  <div className="text-xl font-bold text-pink-300 tabular-nums">
                     US$ {fmtUSD(custoPorDia[dia.id] || 0)}
                   </div>
-                  <div className="text-[10px] text-[#f2e8dd]/35">editar em Custos →</div>
+                  <div className="text-[10px] text-[#fbebd9]/35">editar em Custos →</div>
                 </button>
               </div>
 
               {hotelPorDia[dia.id]?.length > 0 && (
-                <div className="flex items-start gap-2 mb-3 text-sm text-[#f2e8dd]/70">
-                  <BedDouble size={14} className="text-orange-300/70 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 mb-3 text-sm text-[#fbebd9]/70">
+                  <BedDouble size={14} className="text-fuchsia-300/70 shrink-0 mt-0.5" />
                   <span className="min-w-0">{hotelPorDia[dia.id].join(" · ")}</span>
                 </div>
               )}
@@ -864,7 +884,7 @@ export default function App() {
               <h2 className="text-2xl font-bold mb-1 leading-snug">
                 <Editavel valor={dia.titulo} multiline onChange={(v) => atualizarDia(dia.id, "titulo", v)} />
               </h2>
-              <p className="text-sm text-[#f2e8dd]/50 mb-6">
+              <p className="text-sm text-[#fbebd9]/50 mb-6">
                 <Editavel valor={dia.nota} onChange={(v) => atualizarDia(dia.id, "nota", v)} />
               </p>
 
@@ -874,10 +894,10 @@ export default function App() {
                   return (
                     <li
                       key={a.id}
-                      className="group flex gap-4 items-start rounded-xl border border-[#f2e8dd]/10 bg-[#f2e8dd]/[0.05] p-4 transition-all duration-300 hover:bg-[#f2e8dd]/[0.12] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
+                      className="group flex gap-4 items-start rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.05] p-4 transition-all duration-300 hover:bg-[#fbebd9]/[0.12] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
                     >
                       <div className="shrink-0 flex flex-col items-center gap-1.5 w-[4.5rem]">
-                        <div className="flex items-center gap-1 text-orange-200 w-full justify-center">
+                        <div className="flex items-center gap-1 text-fuchsia-200 w-full justify-center">
                           <Clock size={11} className="opacity-50 shrink-0" />
                           <Editavel
                             valor={a.hora}
@@ -885,15 +905,15 @@ export default function App() {
                             onChange={(v) => atualizarAtiv(dia.id, a.id, "hora", v)}
                           />
                         </div>
-                        <Icone size={15} className="text-[#f2e8dd]/35" />
+                        <Icone size={15} className="text-[#fbebd9]/35" />
                       </div>
-                      <p className="flex-1 text-[15px] leading-relaxed text-[#f2e8dd]/85 pt-0.5">
+                      <p className="flex-1 text-[15px] leading-relaxed text-[#fbebd9]/85 pt-0.5">
                         <Editavel valor={a.texto} multiline onChange={(v) => atualizarAtiv(dia.id, a.id, "texto", v)} />
                       </p>
                       <button
                         onClick={() => removerAtiv(dia.id, a.id)}
                         aria-label="Remover atividade"
-                        className="shrink-0 p-1.5 rounded-lg text-[#f2e8dd]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                        className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -905,7 +925,7 @@ export default function App() {
               <div className="flex items-center justify-between mt-5">
                 <button
                   onClick={() => adicionarAtiv(dia.id)}
-                  className="flex items-center gap-2 text-sm font-semibold text-orange-300 hover:text-orange-200 px-3 py-2 rounded-lg hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                  className="flex items-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-3 py-2 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                 >
                   <Plus size={15} /> Adicionar atividade
                 </button>
@@ -914,7 +934,7 @@ export default function App() {
                     onClick={() => setAtivo((i) => Math.max(0, i - 1))}
                     disabled={ativo === 0}
                     aria-label="Dia anterior"
-                    className="p-2.5 rounded-lg bg-[#f2e8dd]/10 hover:bg-[#f2e8dd]/20 disabled:opacity-25 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                    className="p-2.5 rounded-lg bg-[#fbebd9]/10 hover:bg-[#fbebd9]/20 disabled:opacity-25 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                   >
                     <ChevronLeft size={16} />
                   </button>
@@ -922,7 +942,7 @@ export default function App() {
                     onClick={() => setAtivo((i) => Math.min(estado.roteiro.length - 1, i + 1))}
                     disabled={ativo === estado.roteiro.length - 1}
                     aria-label="Próximo dia"
-                    className="p-2.5 rounded-lg bg-[#f2e8dd]/10 hover:bg-[#f2e8dd]/20 disabled:opacity-25 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                    className="p-2.5 rounded-lg bg-[#fbebd9]/10 hover:bg-[#fbebd9]/20 disabled:opacity-25 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                   >
                     <ChevronRight size={16} />
                   </button>
@@ -940,18 +960,18 @@ export default function App() {
               <button
                 onClick={() => setAbrirFin((v) => !v)}
                 aria-expanded={abrirFin}
-                className="w-full flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-orange-300/70 rounded-lg"
+                className="w-full flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded-lg"
               >
                 <h2 className="text-xl font-bold">Situação financeira</h2>
                 <div className="flex items-center gap-3 shrink-0">
                   {!abrirFin && (
                     <span className="text-sm tabular-nums">
-                      <span className="text-teal-300 font-bold">US$ {fmt(fin.pago)}</span>
-                      <span className="text-[#f2e8dd]/30 mx-1">·</span>
-                      <span className="text-amber-300 font-bold">US$ {fmt(fin.pendente)}</span>
+                      <span className="text-pink-300 font-bold">US$ {fmt(fin.pago)}</span>
+                      <span className="text-[#fbebd9]/30 mx-1">·</span>
+                      <span className="text-orange-300 font-bold">US$ {fmt(fin.pendente)}</span>
                     </span>
                   )}
-                  <ChevronDown size={18} className={`text-[#f2e8dd]/50 transition-transform duration-300 ${abrirFin ? "rotate-180" : ""}`} />
+                  <ChevronDown size={18} className={`text-[#fbebd9]/50 transition-transform duration-300 ${abrirFin ? "rotate-180" : ""}`} />
                 </div>
               </button>
 
@@ -966,53 +986,53 @@ export default function App() {
                     <div key={k} className={`rounded-xl border p-3.5 ${c.bg} ${c.bd}`}>
                       <div className={`text-[10px] uppercase tracking-widest mb-1 ${c.txt}`}>{st.rot}</div>
                       <div className="text-xl font-bold tabular-nums">US$ {fmt(v)}</div>
-                      <div className="text-[10px] text-[#f2e8dd]/35 mt-0.5">{n} {n === 1 ? "item" : "itens"}</div>
+                      <div className="text-[10px] text-[#fbebd9]/35 mt-0.5">{n} {n === 1 ? "item" : "itens"}</div>
                     </div>
                   );
                 })}
               </div>
 
-              <div className="space-y-2 pt-4 border-t border-[#f2e8dd]/15">
+              <div className="space-y-2 pt-4 border-t border-[#fbebd9]/15">
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-teal-300 font-semibold">Gasto alocado pago</span>
-                  <span className="tabular-nums font-bold text-teal-300">US$ {fmt(fin.pago)}</span>
+                  <span className="text-pink-300 font-semibold">Gasto alocado pago</span>
+                  <span className="tabular-nums font-bold text-pink-300">US$ {fmt(fin.pago)}</span>
                 </div>
                 <div className="flex items-baseline justify-between text-sm">
-                  <span className="text-amber-300 font-semibold">Gasto alocado pendente</span>
-                  <span className="tabular-nums font-bold text-amber-300">US$ {fmt(fin.pendente)}</span>
+                  <span className="text-orange-300 font-semibold">Gasto alocado pendente</span>
+                  <span className="tabular-nums font-bold text-orange-300">US$ {fmt(fin.pendente)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-xs text-[#f2e8dd]/40 pl-3">
+                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/40 pl-3">
                   <span>· na fatura antes da viagem</span>
                   <span className="tabular-nums">US$ {fmt(fin.faturar)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-xs text-[#f2e8dd]/40 pl-3">
+                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/40 pl-3">
                   <span>· a pagar na chegada</span>
                   <span className="tabular-nums">US$ {fmt(fin.chegada)}</span>
                 </div>
-                <div className="flex items-baseline justify-between text-xs text-[#f2e8dd]/40 pl-3">
+                <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/40 pl-3">
                   <span>· ainda sem reserva</span>
                   <span className="tabular-nums">US$ {fmt(fin.aberto)}</span>
                 </div>
                 {fin.iof > 0 && (
-                  <div className="flex items-baseline justify-between text-xs text-rose-300/80 pt-2 border-t border-[#f2e8dd]/10">
+                  <div className="flex items-baseline justify-between text-xs text-rose-300/80 pt-2 border-t border-[#fbebd9]/10">
                     <span>IOF incluído nos valores acima</span>
                     <span className="tabular-nums">US$ {fmt(fin.iof)}</span>
                   </div>
                 )}
-                <div className="flex items-baseline justify-between pt-3 border-t border-[#f2e8dd]/15">
-                  <span className="text-sm uppercase tracking-widest text-[#f2e8dd]/50">Total</span>
+                <div className="flex items-baseline justify-between pt-3 border-t border-[#fbebd9]/15">
+                  <span className="text-sm uppercase tracking-widest text-[#fbebd9]/50">Total</span>
                   <span className="text-3xl font-black tabular-nums">US$ {fmt(total)}</span>
                 </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-[#f2e8dd]/10 flex items-center justify-between gap-3">
-                <div className="text-xs text-[#f2e8dd]/45">
+              <div className="mt-4 pt-4 border-t border-[#fbebd9]/10 flex items-center justify-between gap-3">
+                <div className="text-xs text-[#fbebd9]/45">
                   Alíquota do IOF{" "}
-                  <span className="font-bold text-[#f2e8dd]/80">
+                  <span className="font-bold text-[#fbebd9]/80">
                     <Editavel valor={estado.iof} numero onChange={(v) => setEstado((s) => ({ ...s, iof: v }))} />%
                   </span>
                 </div>
-                <div className="text-xs text-[#f2e8dd]/35 text-right">
+                <div className="text-xs text-[#fbebd9]/35 text-right">
                   Passeios US$ {fmt(totalRoteiro)} · Hospedagem US$ {fmt(totalHosp)}
                 </div>
               </div>
@@ -1025,29 +1045,29 @@ export default function App() {
               <button
                 onClick={() => setAbrirCambio((v) => !v)}
                 aria-expanded={abrirCambio}
-                className="w-full flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-orange-300/70 rounded-lg"
+                className="w-full flex items-center justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded-lg"
               >
                 <h2 className="text-xl font-bold">Câmbio</h2>
                 <div className="flex items-center gap-3 shrink-0">
                   {!abrirCambio && (
-                    <span className="text-xs text-[#f2e8dd]/45 tabular-nums hidden sm:inline">
+                    <span className="text-xs text-[#fbebd9]/45 tabular-nums hidden sm:inline">
                       R$ {fmt(1 / (estado.cambio.BRL || 1), 2)}/US$
                     </span>
                   )}
-                  <ChevronDown size={18} className={`text-[#f2e8dd]/50 transition-transform duration-300 ${abrirCambio ? "rotate-180" : ""}`} />
+                  <ChevronDown size={18} className={`text-[#fbebd9]/50 transition-transform duration-300 ${abrirCambio ? "rotate-180" : ""}`} />
                 </div>
               </button>
 
               {abrirCambio && (
                 <div className="mt-4">
                   <div className="flex items-center justify-between gap-3 mb-4">
-                    <p className="text-xs text-[#f2e8dd]/45 leading-relaxed">
+                    <p className="text-xs text-[#fbebd9]/45 leading-relaxed">
                       Quanto vale 1 unidade da moeda em dólar. Atualiza sozinho uma vez por dia; dá para ajustar à mão se estiver sem internet.
                     </p>
                     <button
                       onClick={() => buscarCambio(true)}
                       disabled={buscandoCambio}
-                      className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-orange-300 hover:text-orange-200 px-2.5 py-1.5 rounded-lg hover:bg-[#f2e8dd]/10 disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                      className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-2.5 py-1.5 rounded-lg hover:bg-[#fbebd9]/10 disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                     >
                       <RefreshCw size={13} className={buscandoCambio ? "animate-spin" : ""} />
                       Atualizar agora
@@ -1056,16 +1076,16 @@ export default function App() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {Object.entries(MOEDAS).map(([cod, m]) => (
-                      <div key={cod} className="rounded-xl bg-[#f2e8dd]/[0.05] border border-[#f2e8dd]/10 p-3">
-                        <div className="text-[10px] uppercase tracking-widest text-orange-300/70 mb-1">{cod} · {m.nome}</div>
+                      <div key={cod} className="rounded-xl bg-[#fbebd9]/[0.05] border border-[#fbebd9]/10 p-3">
+                        <div className="text-[10px] uppercase tracking-widest text-fuchsia-300/70 mb-1">{cod} · {m.nome}</div>
                         {cod === "USD" ? (
-                          <div className="text-sm font-semibold text-[#f2e8dd]/40">1,00 (base)</div>
+                          <div className="text-sm font-semibold text-[#fbebd9]/40">1,00 (base)</div>
                         ) : (
                           <>
                             <div className="text-sm font-semibold tabular-nums">
                               <Editavel valor={estado.cambio[cod]} numero onChange={(v) => atualizarCambio(cod, v)} />
                             </div>
-                            <div className="text-[10px] text-[#f2e8dd]/35 mt-0.5 tabular-nums">
+                            <div className="text-[10px] text-[#fbebd9]/35 mt-0.5 tabular-nums">
                               {fmt(1 / (estado.cambio[cod] || 1), 2)} por US$ 1
                             </div>
                           </>
@@ -1074,7 +1094,7 @@ export default function App() {
                     ))}
                   </div>
 
-                  <div className="mt-3 flex items-baseline justify-between gap-3 text-[11px] text-[#f2e8dd]/35">
+                  <div className="mt-3 flex items-baseline justify-between gap-3 text-[11px] text-[#fbebd9]/35">
                     <span>
                       {estado.cambioAtualizadoEm
                         ? `Atualizado em ${new Date(estado.cambioAtualizadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
@@ -1084,7 +1104,7 @@ export default function App() {
                       href="https://www.exchangerate-api.com"
                       target="_blank"
                       rel="noreferrer"
-                      className="hover:text-[#f2e8dd]/60 transition-colors shrink-0"
+                      className="hover:text-[#fbebd9]/60 transition-colors shrink-0"
                     >
                       Rates by Exchange Rate API
                     </a>
@@ -1096,12 +1116,12 @@ export default function App() {
             {/* Fichas de custo */}
             <div className={`${vidro} rounded-2xl p-6`}>
               <h3 className="text-base font-bold mb-1">Fichas de custo</h3>
-              <p className="text-sm text-[#f2e8dd]/50 mb-5">
+              <p className="text-sm text-[#fbebd9]/50 mb-5">
                 Cada gasto é uma ficha atrelada a um dia. Os totais por dia aparecem no Roteiro.
               </p>
 
               {(estado.custos || []).length === 0 && (
-                <p className="text-sm text-[#f2e8dd]/30 italic py-4 text-center">
+                <p className="text-sm text-[#fbebd9]/30 italic py-4 text-center">
                   Nenhuma ficha ainda. Use o botão de um dos dias abaixo para começar.
                 </p>
               )}
@@ -1118,12 +1138,12 @@ export default function App() {
                           <span className="text-sm font-black shrink-0">
                             {d ? `Dia ${d.n}` : "Sem dia"}
                           </span>
-                          {d && <span className="text-[11px] text-[#f2e8dd]/40 shrink-0">{d.data}</span>}
-                          {d && <span className="text-[11px] text-[#f2e8dd]/40 truncate hidden sm:inline">· {d.titulo}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/40 shrink-0">{d.data}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/40 truncate hidden sm:inline">· {d.titulo}</span>}
                         </div>
-                        <div className="flex-1 border-t border-[#f2e8dd]/10" />
+                        <div className="flex-1 border-t border-[#fbebd9]/10" />
                         {subtotal > 0 && (
-                          <span className="text-xs font-bold text-teal-300 tabular-nums shrink-0">
+                          <span className="text-xs font-bold text-pink-300 tabular-nums shrink-0">
                             US$ {fmtUSD(subtotal)}
                           </span>
                         )}
@@ -1132,7 +1152,7 @@ export default function App() {
                             onClick={() => adicionarCusto(d.id)}
                             aria-label={`Nova ficha no dia ${d.n}`}
                             title="Nova ficha neste dia"
-                            className="shrink-0 p-1.5 rounded-lg text-orange-300/70 hover:text-orange-200 hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                            className="shrink-0 p-1.5 rounded-lg text-fuchsia-300/70 hover:text-fuchsia-200 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                           >
                             <Plus size={15} />
                           </button>
@@ -1140,7 +1160,7 @@ export default function App() {
                       </div>
 
                       {fichas.length === 0 ? (
-                        <p className="text-xs text-[#f2e8dd]/25 italic pl-1">Sem lançamentos.</p>
+                        <p className="text-xs text-[#fbebd9]/25 italic pl-1">Sem lançamentos.</p>
                       ) : (
                         <ul className="space-y-2.5">
                           {fichas.map((c) => {
@@ -1160,7 +1180,7 @@ export default function App() {
                                         value={c.diaId || ""}
                                         onChange={(e) => atualizarCusto(c.id, "diaId", e.target.value || null)}
                                         aria-label="Dia da viagem"
-                                        className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-[#f2e8dd]/10 text-[#f2e8dd]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-orange-300/70 [&>option]:bg-stone-800"
+                                        className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
                                       >
                                         <option value="">Sem dia</option>
                                         {estado.roteiro.map((x) => (
@@ -1171,7 +1191,7 @@ export default function App() {
                                         value={c.moeda}
                                         onChange={(e) => atualizarCusto(c.id, "moeda", e.target.value)}
                                         aria-label="Moeda"
-                                        className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-[#f2e8dd]/10 text-[#f2e8dd]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-orange-300/70 [&>option]:bg-stone-800"
+                                        className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
                                       >
                                         {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
                                       </select>
@@ -1181,11 +1201,11 @@ export default function App() {
                                     </div>
                                   </div>
                                   <div className="text-right shrink-0">
-                                    <div className="text-base font-bold text-teal-300 tabular-nums">US$ {fmtUSD(usd)}</div>
+                                    <div className="text-base font-bold text-pink-300 tabular-nums">US$ {fmtUSD(usd)}</div>
                                     <button
                                       onClick={() => removerCusto(c.id)}
                                       aria-label="Excluir ficha"
-                                      className="mt-1 p-1.5 rounded-lg text-[#f2e8dd]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                      className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                                     >
                                       <Trash2 size={14} />
                                     </button>
@@ -1211,7 +1231,7 @@ export default function App() {
             {/* Hospedagens no consolidado */}
             <div className={`${vidro} rounded-2xl p-6`}>
               <h3 className="text-base font-bold mb-1">Hospedagem no total</h3>
-              <p className="text-sm text-[#f2e8dd]/50 mb-4">
+              <p className="text-sm text-[#fbebd9]/50 mb-4">
                 As reservas ativas entram no consolidado. Edite os valores na aba Hospedagem.
               </p>
               <ul className="space-y-1.5">
@@ -1222,16 +1242,16 @@ export default function App() {
                     <li key={x.chave}>
                       <button
                         onClick={() => setAba("hotel")}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#f2e8dd]/10 hover:border-[#f2e8dd]/25 hover:bg-[#f2e8dd]/[0.06] transition-all text-left focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#fbebd9]/10 hover:border-[#fbebd9]/25 hover:bg-[#fbebd9]/[0.06] transition-all text-left focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                       >
                         <span className={`shrink-0 w-1.5 h-8 rounded-full ${c.solid}`} />
                         <span className="flex-1 min-w-0">
-                          <span className="block text-sm truncate text-[#f2e8dd]/85">{x.rotulo}</span>
+                          <span className="block text-sm truncate text-[#fbebd9]/85">{x.rotulo}</span>
                           <span className={`text-[10px] uppercase tracking-wider ${c.txt}`}>
                             {st.curto} · {PAGAMENTOS[x.l.pagamento]?.rot || "—"}
                           </span>
                         </span>
-                        <span className="shrink-0 text-sm font-bold tabular-nums text-[#f2e8dd]/90">
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-[#fbebd9]/90">
                           US$ {fmtUSD(lancEmUSD(x.l, estado.cambio, estado.iof))}
                         </span>
                       </button>
@@ -1239,10 +1259,10 @@ export default function App() {
                   );
                 })}
               </ul>
-              <p className="mt-4 text-xs text-[#f2e8dd]/40 leading-relaxed">
+              <p className="mt-4 text-xs text-[#fbebd9]/40 leading-relaxed">
                 Não inclui passagens aéreas. A hospedagem soma apenas as reservas ativas.
               </p>
-              <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-[#f2e8dd]/40 hover:text-[#f2e8dd]/80 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70 rounded px-1">
+              <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-[#fbebd9]/40 hover:text-[#fbebd9]/80 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded px-1">
                 <RotateCcw size={12} /> Restaurar tudo ao original
               </button>
             </div>
@@ -1254,14 +1274,14 @@ export default function App() {
           <div className={`${vidro} rounded-2xl p-6`}>
             <div className="flex items-baseline justify-between gap-3 mb-1">
               <h2 className="text-xl font-bold">Antes de viajar</h2>
-              <span className="text-sm text-[#f2e8dd]/45 tabular-nums shrink-0">{feitos}/{estado.alertas.length}</span>
+              <span className="text-sm text-[#fbebd9]/45 tabular-nums shrink-0">{feitos}/{estado.alertas.length}</span>
             </div>
-            <p className="text-sm text-[#f2e8dd]/50 mb-6">
+            <p className="text-sm text-[#fbebd9]/50 mb-6">
               Clique no texto para editar. O sino marca as pendências críticas.
             </p>
 
             {estado.alertas.length === 0 && (
-              <p className="text-sm text-[#f2e8dd]/30 italic py-6 text-center">
+              <p className="text-sm text-[#fbebd9]/30 italic py-6 text-center">
                 Nenhuma pendência. Use o botão abaixo para adicionar.
               </p>
             )}
@@ -1272,24 +1292,24 @@ export default function App() {
                   key={a.id}
                   className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-300 ${
                     a.feito
-                      ? "bg-teal-500/10 border-teal-400/30"
+                      ? "bg-pink-500/10 border-pink-400/30"
                       : a.critico
-                      ? "bg-amber-500/10 border-amber-400/30"
-                      : "bg-[#f2e8dd]/[0.05] border-[#f2e8dd]/15 hover:bg-[#f2e8dd]/[0.09]"
+                      ? "bg-orange-500/10 border-orange-400/30"
+                      : "bg-[#fbebd9]/[0.05] border-[#fbebd9]/15 hover:bg-[#fbebd9]/[0.09]"
                   }`}
                 >
                   <button
                     onClick={() => alternarAlerta(a.id)}
                     aria-pressed={a.feito}
                     aria-label={a.feito ? "Desmarcar" : "Marcar como concluída"}
-                    className={`shrink-0 w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-                      a.feito ? "bg-teal-400 border-teal-400" : "border-[#f2e8dd]/35 hover:border-[#f2e8dd]/70"
+                    className={`shrink-0 w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                      a.feito ? "bg-pink-400 border-pink-400" : "border-[#fbebd9]/35 hover:border-[#fbebd9]/70"
                     }`}
                   >
-                    {a.feito && <Check size={13} className="text-[#04161a]" strokeWidth={3.5} />}
+                    {a.feito && <Check size={13} className="text-[#0d0b14]" strokeWidth={3.5} />}
                   </button>
 
-                  <div className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-[#f2e8dd]/35" : "text-[#f2e8dd]/85"}`}>
+                  <div className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-[#fbebd9]/35" : "text-[#fbebd9]/85"}`}>
                     <Editavel valor={a.texto} multiline onChange={(v) => atualizarAlerta(a.id, "texto", v)} />
                   </div>
 
@@ -1298,10 +1318,10 @@ export default function App() {
                     aria-pressed={a.critico}
                     aria-label={a.critico ? "Remover marcação de crítica" : "Marcar como crítica"}
                     title={a.critico ? "Crítica" : "Marcar como crítica"}
-                    className={`shrink-0 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-amber-300/70 ${
+                    className={`shrink-0 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
                       a.critico
-                        ? "text-amber-300 hover:bg-amber-500/15"
-                        : "text-[#f2e8dd]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-amber-300 hover:bg-amber-500/15"
+                        ? "text-orange-300 hover:bg-orange-500/15"
+                        : "text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-orange-300 hover:bg-orange-500/15"
                     }`}
                   >
                     <AlertTriangle size={15} />
@@ -1310,7 +1330,7 @@ export default function App() {
                   <button
                     onClick={() => removerAlerta(a.id)}
                     aria-label="Excluir pendência"
-                    className="shrink-0 p-1.5 rounded-lg text-[#f2e8dd]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                    className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/25 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -1320,7 +1340,7 @@ export default function App() {
 
             <button
               onClick={adicionarAlerta}
-              className="mt-4 flex items-center gap-2 text-sm font-semibold text-orange-300 hover:text-orange-200 px-3 py-2 rounded-lg hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+              className="mt-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-3 py-2 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
             >
               <Plus size={15} /> Adicionar pendência
             </button>
@@ -1334,13 +1354,13 @@ export default function App() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-bold mb-1">Hospedagem</h2>
-                  <p className="text-sm text-[#f2e8dd]/50">
+                  <p className="text-sm text-[#fbebd9]/50">
                     Cada hotel é uma reserva própria, com suas noites e seu pagamento. Ative os que estão confirmados.
                   </p>
                 </div>
                 <button
                   onClick={adicionarBase}
-                  className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-orange-300 hover:text-orange-200 px-2.5 py-1.5 rounded-lg hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                  className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-2.5 py-1.5 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                 >
                   <Plus size={14} /> Localidade
                 </button>
@@ -1359,25 +1379,25 @@ export default function App() {
                       onClick={() => setBaseAberta((m) => ({ ...m, [b.id]: !aberta }))}
                       aria-expanded={aberta}
                       aria-label={aberta ? "Recolher" : "Expandir"}
-                      className="shrink-0 p-1 rounded-lg hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                      className="shrink-0 p-1 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                     >
-                      <ChevronDown size={18} className={`text-[#f2e8dd]/50 transition-transform duration-300 ${aberta ? "rotate-180" : ""}`} />
+                      <ChevronDown size={18} className={`text-[#fbebd9]/50 transition-transform duration-300 ${aberta ? "rotate-180" : ""}`} />
                     </button>
                     <h3 className="text-lg font-bold flex-1 min-w-0">
                       <Editavel valor={b.nome} onChange={(v) => atualizarBase(b.id, "nome", v)} />
                     </h3>
                     <div className="text-right shrink-0">
                       {totalBase > 0 && (
-                        <div className="text-sm font-bold text-teal-300 tabular-nums">US$ {fmtUSD(totalBase)}</div>
+                        <div className="text-sm font-bold text-pink-300 tabular-nums">US$ {fmtUSD(totalBase)}</div>
                       )}
-                      <div className="text-[10px] uppercase tracking-widest text-[#f2e8dd]/40">
+                      <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/40">
                         {ativos.length ? `${ativos.length} ${ativos.length === 1 ? "reserva" : "reservas"}` : "sem reserva"}
                       </div>
                     </div>
                     <button
                       onClick={() => { if (window.confirm(`Excluir a localidade "${b.nome}" e todos os seus hotéis?`)) removerBase(b.id); }}
                       aria-label="Excluir localidade"
-                      className="shrink-0 p-1.5 rounded-lg text-[#f2e8dd]/20 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                      className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/20 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -1393,7 +1413,7 @@ export default function App() {
                           <div
                             key={sl.id}
                             className={`group rounded-xl border p-4 transition-all duration-300 ${
-                              on ? "bg-teal-500/10 border-teal-400/40" : "bg-[#f2e8dd]/[0.05] border-[#f2e8dd]/10"
+                              on ? "bg-pink-500/10 border-pink-400/40" : "bg-[#fbebd9]/[0.05] border-[#fbebd9]/10"
                             }`}
                           >
                             <div className="flex items-start gap-3 mb-3">
@@ -1402,11 +1422,11 @@ export default function App() {
                                 aria-pressed={on}
                                 aria-label={on ? "Desativar reserva" : "Ativar reserva"}
                                 title={on ? "Reserva ativa — soma no total" : "Ative para somar no total"}
-                                className={`shrink-0 w-5 h-5 mt-1 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-                                  on ? "bg-teal-400 border-teal-400" : "border-[#f2e8dd]/35 hover:border-[#f2e8dd]/70"
+                                className={`shrink-0 w-5 h-5 mt-1 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                                  on ? "bg-pink-400 border-pink-400" : "border-[#fbebd9]/35 hover:border-[#fbebd9]/70"
                                 }`}
                               >
-                                {on && <Check size={13} className="text-[#04161a]" strokeWidth={3.5} />}
+                                {on && <Check size={13} className="text-[#0d0b14]" strokeWidth={3.5} />}
                               </button>
 
                               <div className="flex-1 min-w-0">
@@ -1414,7 +1434,7 @@ export default function App() {
                                   <Editavel
                                     valor={sl.hotel || "Nome do hotel"}
                                     onChange={(v) => atualizarSlot(b.id, sl.id, "hotel", v)}
-                                    className={sl.hotel ? "" : "text-[#f2e8dd]/30 italic"}
+                                    className={sl.hotel ? "" : "text-[#fbebd9]/30 italic"}
                                   />
                                 </div>
                                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -1422,8 +1442,8 @@ export default function App() {
                                     <button
                                       key={m}
                                       onClick={() => atualizarSlot(b.id, sl.id, "modo", m)}
-                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-                                        sl.modo === m ? "bg-[#f2e8dd] text-[#04161a]" : "bg-[#f2e8dd]/10 text-[#f2e8dd]/50 hover:bg-[#f2e8dd]/20"
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                                        sl.modo === m ? "bg-[#fbebd9] text-[#0d0b14]" : "bg-[#fbebd9]/10 text-[#fbebd9]/50 hover:bg-[#fbebd9]/20"
                                       }`}
                                     >
                                       {m === "diaria" ? "Diária" : "Fechado"}
@@ -1433,7 +1453,7 @@ export default function App() {
                                     value={sl.moeda}
                                     onChange={(e) => atualizarSlot(b.id, sl.id, "moeda", e.target.value)}
                                     aria-label="Moeda"
-                                    className="text-[10px] font-bold uppercase py-1 px-1.5 rounded-md bg-[#f2e8dd]/10 text-[#f2e8dd]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-orange-300/70 [&>option]:bg-stone-800"
+                                    className="text-[10px] font-bold uppercase py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
                                   >
                                     {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
                                   </select>
@@ -1441,12 +1461,12 @@ export default function App() {
                               </div>
 
                               <div className="text-right shrink-0">
-                                <div className="text-base font-bold text-teal-300 tabular-nums">US$ {fmtUSD(usd)}</div>
-                                <div className="text-[10px] text-[#f2e8dd]/35 tabular-nums">{MOEDAS[sl.moeda].rot} {fmt(local)}</div>
+                                <div className="text-base font-bold text-pink-300 tabular-nums">US$ {fmtUSD(usd)}</div>
+                                <div className="text-[10px] text-[#fbebd9]/35 tabular-nums">{MOEDAS[sl.moeda].rot} {fmt(local)}</div>
                                 <button
                                   onClick={() => removerSlot(b.id, sl.id)}
                                   aria-label="Excluir hotel"
-                                  className="mt-1 p-1.5 rounded-lg text-[#f2e8dd]/20 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                  className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/20 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
                                 >
                                   <Trash2 size={13} />
                                 </button>
@@ -1458,7 +1478,7 @@ export default function App() {
                                 {sl.modo === "diaria" ? (
                                   [["Diária", "diaria"], ["Noites", "noites"], ["Taxas", "taxas"]].map(([rot, campo]) => (
                                     <div key={campo} className="flex items-center justify-between gap-2">
-                                      <span className="text-[#f2e8dd]/45 text-xs">{rot}</span>
+                                      <span className="text-[#fbebd9]/45 text-xs">{rot}</span>
                                       <span className="tabular-nums font-semibold text-right">
                                         <Editavel valor={sl[campo]} numero onChange={(v) => atualizarSlot(b.id, sl.id, campo, v)} />
                                       </span>
@@ -1466,7 +1486,7 @@ export default function App() {
                                   ))
                                 ) : (
                                   <div className="flex items-center justify-between gap-2">
-                                    <span className="text-[#f2e8dd]/45 text-xs">Valor total</span>
+                                    <span className="text-[#fbebd9]/45 text-xs">Valor total</span>
                                     <span className="tabular-nums font-semibold text-right">
                                       <Editavel valor={sl.fechado} numero onChange={(v) => atualizarSlot(b.id, sl.id, "fechado", v)} />
                                     </span>
@@ -1475,7 +1495,7 @@ export default function App() {
                               </div>
 
                               <div>
-                                <div className="text-[10px] uppercase tracking-widest text-[#f2e8dd]/45 mb-1.5">
+                                <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/45 mb-1.5">
                                   Noites desta reserva
                                 </div>
                                 <div className="flex flex-wrap gap-1">
@@ -1487,8 +1507,8 @@ export default function App() {
                                         onClick={() => alternarDiaSlot(b.id, sl.id, d.id)}
                                         aria-pressed={marcado}
                                         title={`Dia ${d.n} · ${d.data}`}
-                                        className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
-                                          marcado ? "bg-orange-400 text-[#04161a]" : "bg-[#f2e8dd]/[0.07] text-[#f2e8dd]/45 hover:bg-[#f2e8dd]/15"
+                                        className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                                          marcado ? "bg-fuchsia-400 text-[#0d0b14]" : "bg-[#fbebd9]/[0.07] text-[#fbebd9]/45 hover:bg-[#fbebd9]/15"
                                         }`}
                                       >
                                         {d.n}
@@ -1500,7 +1520,7 @@ export default function App() {
                             </div>
 
                             {on && (
-                              <div className="pt-3 border-t border-[#f2e8dd]/10">
+                              <div className="pt-3 border-t border-[#fbebd9]/10">
                                 <Pagamento
                                   l={{ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }}
                                   aliquota={estado.iof}
@@ -1515,7 +1535,7 @@ export default function App() {
 
                       <button
                         onClick={() => adicionarSlot(b.id)}
-                        className="flex items-center gap-2 text-sm font-semibold text-orange-300 hover:text-orange-200 px-3 py-2 rounded-lg hover:bg-[#f2e8dd]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-300/70"
+                        className="flex items-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-3 py-2 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
                       >
                         <Plus size={15} /> Adicionar hotel
                       </button>
@@ -1527,7 +1547,7 @@ export default function App() {
           </div>
         )}
 
-        <footer className="mt-8 text-center text-[11px] text-[#f2e8dd]/30">
+        <footer className="mt-8 text-center text-[11px] text-[#fbebd9]/30">
           {configurado
             ? `Sincronizado na nuvem · ${ID_VIAGEM}`
             : "Salvo apenas neste navegador — configure a sincronização para usar em outros aparelhos."}
