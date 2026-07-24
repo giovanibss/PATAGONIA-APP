@@ -432,6 +432,29 @@ export default function App() {
   const [buscandoCambio, setBuscandoCambio] = useState(false);
   const [baseAberta, setBaseAberta] = useState({});
 
+  /* Progresso da rolagem no trecho do hero (0 = topo, 1 = hero dissolvido).
+     Alimenta o crossfade entre o hero e os wallpapers. */
+  const [rolagem, setRolagem] = useState(0);
+  useEffect(() => {
+    const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let raf = null;
+    const medir = () => {
+      raf = null;
+      const alcance = window.innerHeight * 0.75; /* dissolve ao longo de 75% da tela */
+      setRolagem(Math.min(1, Math.max(0, window.scrollY / alcance)));
+    };
+    if (reduzir) { setRolagem(0); return; }
+    const aoRolar = () => { if (raf === null) raf = requestAnimationFrame(medir); };
+    window.addEventListener("scroll", aoRolar, { passive: true });
+    window.addEventListener("resize", aoRolar, { passive: true });
+    medir();
+    return () => {
+      window.removeEventListener("scroll", aoRolar);
+      window.removeEventListener("resize", aoRolar);
+      if (raf !== null) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   /* Busca cotações na open.er-api.com (gratuita, sem chave, atualiza 1x/dia).
      A resposta traz "quantos X valem 1 dólar"; o app guarda o inverso. */
   const buscarCambio = async (forcar = false) => {
@@ -719,7 +742,7 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen w-full font-sans text-[#fbebd9] overflow-x-hidden">
-      {/* Fundos cênicos em crossfade — discretos, para não competir com o conteúdo */}
+      {/* Camada 1 — wallpapers, sempre atrás; revelados conforme o hero dissolve */}
       {FUNDOS.map((url, i) => (
         <div
           key={url}
@@ -730,59 +753,67 @@ export default function App() {
       ))}
       <div className="fixed inset-0 bg-gradient-to-b from-[#0d0b14]/75 via-[#140d1c]/82 to-[#0a0710]/92" />
 
-      {/* Hero — imagem inteira, dissolvendo nas bordas */}
-      <div className="relative z-10 pointer-events-none">
-        <div className="relative w-full max-w-4xl mx-auto">
-          <img
-            src="/hero.jpg"
-            alt=""
-            aria-hidden="true"
-            className="w-full h-auto object-contain"
-            style={{
-              WebkitMaskImage:
-                "radial-gradient(118% 90% at 50% 34%, #000 40%, rgba(0,0,0,0.72) 60%, transparent 88%)",
-              maskImage:
-                "radial-gradient(118% 90% at 50% 34%, #000 40%, rgba(0,0,0,0.72) 60%, transparent 88%)",
-            }}
-          />
-          <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[#0d0b14] via-[#0d0b14]/50 to-transparent" />
-        </div>
+      {/* Camada 2 — hero em tela cheia, dissolve ao rolar */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 pointer-events-none"
+        style={{ opacity: 1 - rolagem }}
+      >
+        <img
+          src="/hero.jpg"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover object-center"
+          style={{ transform: `scale(${1 + rolagem * 0.08})`, transformOrigin: "50% 40%" }}
+        />
+        {/* escurece a base do hero para o conteúdo nascer legível */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0d0b14]/25 via-[#0d0b14]/45 to-[#0d0b14]" />
+      </div>
 
-        {/* Títulos sobre o hero */}
-        <div className="relative max-w-5xl mx-auto px-4 sm:px-6 -mt-14 sm:-mt-24">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.3em] text-pink-300/80 mb-1">
-                Kooka Planner
+      {/* Camada 3 — conteúdo, rola por cima de tudo */}
+      <div className="relative z-10">
+        {/* Espaço da primeira tela: só o hero aparece aqui */}
+        <div className="h-[78vh] min-h-[420px] flex items-end">
+          <div
+            className="w-full max-w-5xl mx-auto px-4 sm:px-6 pb-10"
+            style={{ opacity: Math.max(0, 1 - rolagem * 1.5), transform: `translateY(${rolagem * -20}px)` }}
+          >
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.3em] text-pink-300/80 mb-1.5">
+                  Kooka Planner
+                </div>
+                <h1 className="text-5xl sm:text-7xl font-black tracking-tight leading-none drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]">
+                  Patagônia
+                </h1>
+                <p className="mt-3 text-sm text-[#fbebd9]/60">
+                  06 – 17 de dezembro · Argentina e Chile
+                </p>
               </div>
-              <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-none drop-shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
-                Patagônia
-              </h1>
-            </div>
-            <div
-              title={
-                sinc === "erro" ? `Erro: ${erroSinc}`
-                : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
-                : "Sincronizado entre seus aparelhos"
-              }
-              className={`pointer-events-auto flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 backdrop-blur-md ${
-                sinc === "ok" ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/15"
-                : sinc === "erro" ? "text-rose-300 border-rose-400/40 bg-rose-500/15"
-                : sinc === "local" ? "text-[#fbebd9]/50 border-[#fbebd9]/15 bg-[#fbebd9]/10"
-                : "text-fuchsia-300 border-fuchsia-400/40 bg-fuchsia-500/15"
-              }`}
-            >
-              {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
-              {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
-              {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
-              {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
-              {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
+              <div
+                title={
+                  sinc === "erro" ? `Erro: ${erroSinc}`
+                  : sinc === "local" ? "Sincronização não configurada — salvo apenas neste navegador"
+                  : "Sincronizado entre seus aparelhos"
+                }
+                className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border shrink-0 backdrop-blur-md ${
+                  sinc === "ok" ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/15"
+                  : sinc === "erro" ? "text-rose-300 border-rose-400/40 bg-rose-500/15"
+                  : sinc === "local" ? "text-[#fbebd9]/50 border-[#fbebd9]/15 bg-[#fbebd9]/10"
+                  : "text-fuchsia-300 border-fuchsia-400/40 bg-fuchsia-500/15"
+                }`}
+              >
+                {sinc === "ok" && <><Cloud size={12} /> Sincronizado</>}
+                {sinc === "salvando" && <><RefreshCw size={12} className="animate-spin" /> Salvando</>}
+                {sinc === "carregando" && <><RefreshCw size={12} className="animate-spin" /> Carregando</>}
+                {sinc === "erro" && <><CloudOff size={12} /> Sem conexão</>}
+                {sinc === "local" && <><CloudOff size={12} /> Só neste aparelho</>}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-8 sm:pb-12">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pb-8 sm:pb-12">
+
 
 
         {/* Resumo */}
@@ -1550,6 +1581,7 @@ export default function App() {
             ? `Sincronizado na nuvem · ${ID_VIAGEM}`
             : "Salvo apenas neste navegador — configure a sincronização para usar em outros aparelhos."}
         </footer>
+        </div>
       </div>
     </div>
   );
