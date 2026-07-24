@@ -3,7 +3,7 @@ import {
   Wallet, ListChecks, CalendarDays, MapPin, Clock,
   Check, Plus, Trash2, ChevronLeft, ChevronRight, AlertTriangle,
   BedDouble, Pencil, RotateCcw, Ship, Utensils, Car, Footprints,
-  Cloud, CloudOff, RefreshCw, ChevronDown,
+  Cloud, CloudOff, RefreshCw, ChevronDown, PieChart, CalendarClock,
 } from "lucide-react";
 import { configurado, carregarNuvem, salvarNuvem, ouvirNuvem, ID_VIAGEM } from "./supabase";
 
@@ -28,11 +28,54 @@ const ALERTAS_INICIAIS = [
 const IOF_PADRAO = 3.5;
 
 const STATUS = {
-  pago:      { rot: "Pago",           curto: "Pago",      cor: "emerald", desc: "Fatura já quitada" },
-  faturar:   { rot: "Cai na fatura",  curto: "Fatura",    cor: "amber",   desc: "Reservado, cobrança antes da viagem" },
-  chegada:   { rot: "Pago na chegada",curto: "Chegada",   cor: "sky",     desc: "Reservado, paga no local" },
-  aberto:    { rot: "Não reservado",  curto: "Aberto",    cor: "slate",   desc: "Ainda sem reserva" },
+  pago:      { rot: "Quitado",           curto: "Quitado",  cor: "emerald", desc: "Já saiu da conta: espécie, débito ou fatura paga" },
+  faturar:   { rot: "Cai na fatura",     curto: "Fatura",   cor: "amber",   desc: "Reservado, ainda vai vencer no cartão" },
+  chegada:   { rot: "A pagar na chegada",curto: "Chegada",  cor: "sky",     desc: "Reservado, paga no local" },
+  aberto:    { rot: "Não reservado",     curto: "Aberto",   cor: "slate",   desc: "Ainda sem reserva" },
 };
+
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/* Rótulo curto de um mês de fatura no formato "AAAA-MM" */
+const rotuloFatura = (mes) => {
+  if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return "sem mês";
+  const [a, m] = mes.split("-");
+  return `${MESES[Number(m) - 1]}/${a.slice(2)}`;
+};
+
+/* Lista de meses para o seletor: do mês atual até 14 à frente */
+function mesesDisponiveis() {
+  const hoje = new Date();
+  const out = [];
+  for (let i = 0; i < 15; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+/* Soma n meses a "AAAA-MM" */
+function somaMes(mes, n) {
+  if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return mes;
+  const [a, m] = mes.split("-").map(Number);
+  const d = new Date(a, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/* Distribui o valor de um lançamento nas parcelas, resolvendo o arredondamento
+   na última para a soma bater exatamente com o total. */
+function parcelasDe(l) {
+  const n = Math.max(1, Math.round(Number(l?.parcelas) || 1));
+  const total = Number(l?.valor) || 0;
+  if (n === 1) return [{ mes: l?.mesFatura || null, valor: total, i: 1, n: 1 }];
+  const base = Math.floor((total / n) * 100) / 100;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const v = i === n - 1 ? Math.round((total - base * (n - 1)) * 100) / 100 : base;
+    out.push({ mes: somaMes(l?.mesFatura, i), valor: v, i: i + 1, n });
+  }
+  return out;
+}
 
 const PAGAMENTOS = {
   credito: { rot: "Crédito", iof: true },
@@ -50,6 +93,7 @@ const CORES = {
 /* Lançamento padrão. Todo custo — de dia ou de hotel — vira um destes. */
 const lanc = (valor = 0) => ({
   status: "aberto", pagamento: "credito", moeda: "USD", iofIsento: false, valor,
+  parcelas: 1, mesFatura: null,
 });
 
 /* IOF incide sobre o valor convertido em reais, mas como o painel trabalha
@@ -86,7 +130,7 @@ const MOEDAS = {
 const novoHotel = (id) => ({
   id, hotel: "", ativo: false, diasIds: [],
   modo: "diaria", moeda: "USD", diaria: 0, noites: 0, taxas: 0, fechado: 0,
-  lanc: { status: "aberto", pagamento: "credito", iofIsento: false },
+  lanc: { status: "aberto", pagamento: "credito", iofIsento: false, parcelas: 1, mesFatura: null },
 });
 
 const HOSPEDAGENS_INICIAIS = [
@@ -213,10 +257,16 @@ function migrar(bruto) {
           status: STATUS[l.status] ? l.status : "aberto",
           pagamento: PAGAMENTOS[l.pagamento] ? l.pagamento : "credito",
           iofIsento: Boolean(l.iofIsento),
+          parcelas: 1, mesFatura: null,
         });
       }
     });
   }
+  e.custos = (e.custos || []).map((c) => ({
+    parcelas: 1, mesFatura: null, ...c,
+    parcelas: Math.max(1, Math.round(Number(c.parcelas) || 1)),
+  }));
+
   /* o lanc do dia deixa de existir para não contar em dobro */
   e.roteiro = (e.roteiro || []).map(({ lanc: _l, custo: _c, ...d }) => d);
 
@@ -227,7 +277,7 @@ function migrar(bruto) {
     const slots = (b.slots || []).map((s) => {
       const migrado = {
         ...s,
-        lanc: { status: "aberto", pagamento: "credito", iofIsento: false, ...(s.lanc || {}) },
+        lanc: { status: "aberto", pagamento: "credito", iofIsento: false, parcelas: 1, mesFatura: null, ...(s.lanc || {}) },
       };
       if (typeof s.ativo !== "boolean") {
         /* o antigo escolhido vira o único hotel ativo, e herda os dias da base */
@@ -407,6 +457,44 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
           </button>
         )}
       </div>
+
+      {dado.status === "faturar" && (
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <span className="text-[10px] text-[#fbebd9]/55 uppercase tracking-wider">Fatura</span>
+          <select
+            value={dado.mesFatura || ""}
+            onChange={(e) => onChange("mesFatura", e.target.value || null)}
+            aria-label="Mês da fatura"
+            className="text-[10px] font-bold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
+          >
+            <option value="">definir mês</option>
+            {mesesDisponiveis().map((m) => (
+              <option key={m} value={m}>{rotuloFatura(m)}</option>
+            ))}
+          </select>
+
+          <span className="text-[10px] text-[#fbebd9]/55 uppercase tracking-wider ml-1">Parcelas</span>
+          <select
+            value={dado.parcelas || 1}
+            onChange={(e) => onChange("parcelas", Number(e.target.value))}
+            aria-label="Número de parcelas"
+            className="text-[10px] font-bold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
+          >
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>{n}×</option>
+            ))}
+          </select>
+
+          {(dado.parcelas || 1) > 1 && dado.mesFatura && (
+            <span className="text-[10px] text-orange-300/80 tabular-nums">
+              {MOEDAS[dado.moeda]?.rot} {fmt(parcelasDe(dado)[0].valor, 2)}/mês até {rotuloFatura(somaMes(dado.mesFatura, (dado.parcelas || 1) - 1))}
+            </span>
+          )}
+          {!dado.mesFatura && (
+            <span className="text-[10px] text-orange-300/70">defina o mês para entrar no cronograma</span>
+          )}
+        </div>
+      )}
 
       {temIOF && iof > 0 && (
         <div className="text-[11px] text-rose-300/80 tabular-nums">
@@ -633,6 +721,27 @@ export default function App() {
     return z;
   }, [lancamentos, estado.cambio, estado.iof]);
 
+  /* Cronograma das faturas: agrupa por mês o que ainda vai vencer no cartão,
+     já quebrado em parcelas. */
+  const faturas = useMemo(() => {
+    const porMes = {};
+    let semMes = 0;
+    lancamentos.forEach(({ l, rotulo }) => {
+      if (l.status !== "faturar") return;
+      const taxa = Number(estado.cambio?.[l.moeda]) || 0;
+      const comIOF = (Number(l.valor) || 0) + iofDe(l, estado.iof);
+      const fator = (Number(l.valor) || 0) > 0 ? comIOF / (Number(l.valor) || 1) : 1;
+      parcelasDe(l).forEach((p) => {
+        const usd = p.valor * fator * taxa;
+        if (!p.mes) { semMes += usd; return; }
+        if (!porMes[p.mes]) porMes[p.mes] = { mes: p.mes, total: 0, itens: [] };
+        porMes[p.mes].total += usd;
+        porMes[p.mes].itens.push({ rotulo, usd, parcela: p.n > 1 ? `${p.i}/${p.n}` : null });
+      });
+    });
+    return { lista: Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes)), semMes };
+  }, [lancamentos, estado.cambio, estado.iof]);
+
   const totalRoteiro = useMemo(
     () => (estado.custos || []).reduce((s, c) => s + lancEmUSD(c, estado.cambio, estado.iof), 0),
     [estado.custos, estado.cambio, estado.iof]
@@ -719,7 +828,7 @@ export default function App() {
   const adicionarCusto = (diaId = null) =>
     setEstado((s) => ({ ...s, custos: [...(s.custos || []), {
       id: `c-${Date.now()}`, nome: "Novo custo", diaId: diaId || s.roteiro[0]?.id || null,
-      valor: 0, moeda: "USD", status: "aberto", pagamento: "credito", iofIsento: false,
+      valor: 0, moeda: "USD", status: "aberto", pagamento: "credito", iofIsento: false, parcelas: 1, mesFatura: null,
     }] }));
 
   const alternarDiaSlot = (baseId, slotId, diaId) =>
@@ -816,41 +925,14 @@ export default function App() {
 
 
 
-        {/* Resumo */}
-        <div className={`${vidro} rounded-2xl p-5 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-4`}>
-          {[
-            { rot: "Já pago", val: `US$ ${fmt(fin.pago)}`, cor: "text-pink-300" },
-            { rot: "A pagar", val: `US$ ${fmt(fin.pendente)}`, cor: "text-orange-300" },
-            { rot: "Total", val: `US$ ${fmt(total)}` },
-            { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-pink-300" : "text-rose-300" },
-          ].map((k, i) => (
-            <div key={i}>
-              <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/55 mb-1">{k.rot}</div>
-              <div className={`text-lg font-bold ${k.cor || ""}`}>{k.val}</div>
-            </div>
-          ))}
-          <div className="col-span-2 sm:col-span-4">
-            <div className="h-2 rounded-full bg-[#fbebd9]/10 overflow-hidden flex">
-              <div className="h-full bg-pink-400 transition-all duration-700" style={{ width: `${pctPago}%` }} />
-              <div
-                className={`h-full transition-all duration-700 ${restante >= 0 ? "bg-orange-400/70" : "bg-rose-500"}`}
-                style={{ width: `${Math.max(0, pct - pctPago)}%` }}
-              />
-            </div>
-            <div className="flex justify-between mt-1.5 text-[10px] text-[#fbebd9]/50">
-              <span>Orçamento <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /></span>
-              {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: US$ {fmt(fin.iof)}</span>}
-            </div>
-          </div>
-        </div>
-
         {/* Abas */}
         <nav className={`${vidro} rounded-xl p-1.5 mb-6 flex gap-1.5`}>
           {[
             { id: "roteiro", rot: "Roteiro", Icone: CalendarDays },
-            { id: "custos", rot: "Custos", Icone: Wallet },
-            { id: "checklist", rot: "Checklist", Icone: ListChecks },
+            { id: "custos", rot: "Lançamentos", Icone: Wallet },
+            { id: "financeiro", rot: "Financeiro", Icone: PieChart },
             { id: "hotel", rot: "Hospedagem", Icone: BedDouble },
+            { id: "checklist", rot: "Checklist", Icone: ListChecks },
           ].map(({ id, rot, Icone }) => (
             <button
               key={id}
@@ -981,9 +1063,37 @@ export default function App() {
           </div>
         )}
 
-        {/* CUSTOS */}
-        {aba === "custos" && (
+        {/* FINANCEIRO */}
+        {aba === "financeiro" && (
           <div className="space-y-3">
+            {/* Panorama */}
+            <div className={`${vidro} rounded-2xl p-5 grid grid-cols-2 sm:grid-cols-4 gap-4`}>
+              {[
+                { rot: "Quitado", val: `US$ ${fmt(fin.pago)}`, cor: "text-pink-300" },
+                { rot: "A pagar", val: `US$ ${fmt(fin.pendente)}`, cor: "text-orange-300" },
+                { rot: "Total", val: `US$ ${fmt(total)}` },
+                { rot: restante >= 0 ? "Folga" : "Acima do teto", val: `US$ ${fmt(Math.abs(restante))}`, cor: restante >= 0 ? "text-pink-300" : "text-rose-300" },
+              ].map((k, i) => (
+                <div key={i}>
+                  <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/55 mb-1">{k.rot}</div>
+                  <div className={`text-lg font-bold ${k.cor || ""}`}>{k.val}</div>
+                </div>
+              ))}
+              <div className="col-span-2 sm:col-span-4">
+                <div className="h-2 rounded-full bg-[#fbebd9]/10 overflow-hidden flex">
+                  <div className="h-full bg-pink-400 transition-all duration-700" style={{ width: `${pctPago}%` }} />
+                  <div
+                    className={`h-full transition-all duration-700 ${restante >= 0 ? "bg-orange-400/70" : "bg-rose-500"}`}
+                    style={{ width: `${Math.max(0, pct - pctPago)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1.5 text-[10px] text-[#fbebd9]/50">
+                  <span>Orçamento <Editavel valor={estado.orcamento} numero prefixo="US$ " onChange={(v) => setEstado((s) => ({ ...s, orcamento: v }))} /></span>
+                  {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: US$ {fmt(fin.iof)}</span>}
+                </div>
+              </div>
+            </div>
+
             {/* Resumo por status (retrátil) */}
             <div className={`${vidro} rounded-2xl p-6`}>
               <button
@@ -1142,6 +1252,72 @@ export default function App() {
               )}
             </div>
 
+            {/* Cronograma das faturas */}
+            <div className={`${vidro} rounded-2xl p-6`}>
+              <div className="flex items-center gap-2 mb-1">
+                <CalendarClock size={16} className="text-orange-300 shrink-0" />
+                <h2 className="text-xl font-bold">Cronograma das faturas</h2>
+              </div>
+              <p className="text-sm text-[#fbebd9]/50 mb-5">
+                O que ainda vai vencer no cartão, mês a mês. Parcelamentos já aparecem divididos.
+              </p>
+
+              {faturas.lista.length === 0 && faturas.semMes === 0 && (
+                <p className="text-sm text-[#fbebd9]/50 italic py-4 text-center">
+                  Nada marcado como “cai na fatura” ainda.
+                </p>
+              )}
+
+              <ul className="space-y-2">
+                {faturas.lista.map((f) => (
+                  <li key={f.mes} className="rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.04] overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#fbebd9]/10">
+                      <span className="text-sm font-bold uppercase tracking-wider text-orange-300">
+                        {rotuloFatura(f.mes)}
+                      </span>
+                      <span className="text-base font-bold tabular-nums">US$ {fmtUSD(f.total)}</span>
+                    </div>
+                    <ul className="divide-y divide-[#fbebd9]/[0.06]">
+                      {f.itens.map((it, i) => (
+                        <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                          <span className="min-w-0 truncate text-[#fbebd9]/80">
+                            {it.rotulo}
+                            {it.parcela && (
+                              <span className="ml-2 text-[10px] font-bold text-orange-300/80">{it.parcela}</span>
+                            )}
+                          </span>
+                          <span className="shrink-0 tabular-nums text-[#fbebd9]/70">US$ {fmtUSD(it.usd)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+
+              {faturas.semMes > 0 && (
+                <div className="mt-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-orange-400/30 bg-orange-500/10">
+                  <span className="text-sm text-orange-300">
+                    Sem mês definido — defina em Lançamentos para entrar no cronograma
+                  </span>
+                  <span className="text-sm font-bold tabular-nums text-orange-300">US$ {fmtUSD(faturas.semMes)}</span>
+                </div>
+              )}
+
+              {faturas.lista.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-[#fbebd9]/10 flex items-baseline justify-between">
+                  <span className="text-sm uppercase tracking-widest text-[#fbebd9]/50">Total nas faturas</span>
+                  <span className="text-xl font-bold tabular-nums text-orange-300">
+                    US$ {fmtUSD(faturas.lista.reduce((t, f) => t + f.total, 0) + faturas.semMes)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* LANÇAMENTOS */}
+        {aba === "custos" && (
+          <div className="space-y-3">
             {/* Fichas de custo */}
             <div className={`${vidro} rounded-2xl p-6`}>
               <h3 className="text-base font-bold mb-1">Fichas de custo</h3>
