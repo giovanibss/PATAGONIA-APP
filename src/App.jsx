@@ -508,45 +508,61 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
 /* ─────────────────────────  ESTRELAS CADENTES  ───────────────────────── */
 
 /* Riscos rápidos no céu do hero. Vivem só na faixa superior, onde a imagem
-   é escura o bastante para o traço aparecer, e somem ao descer rumo ao sol. */
+   é escura o bastante para o traço aparecer, e somem ao descer rumo ao sol.
+   O canvas é remedido continuamente: no celular o layout se acomoda depois
+   da montagem e a barra de endereço muda a altura durante a rolagem. */
 function EstrelasCadentes({ ativo = true }) {
   const ref = useRef(null);
 
   useEffect(() => {
     if (!ativo) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const cv = ref.current;
     if (!cv) return;
     const ctx = cv.getContext("2d");
+    if (!ctx) return;
+
     let raf = null;
     let estrelas = [];
-    let proxima = 400 + Math.random() * 900;
+    let L = 0, A = 0, dpr = 0;
+    let proxima = 500 + Math.random() * 700;
     let ultimo = performance.now();
+    let conta = 0;
 
-    const redimensionar = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      cv.width = Math.max(1, Math.floor(cv.clientWidth * dpr));
-      cv.height = Math.max(1, Math.floor(cv.clientHeight * dpr));
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    /* Ajusta o buffer ao tamanho real. Se ainda não há layout, devolve false
+       e o loop tenta de novo no quadro seguinte. */
+    const medir = () => {
+      const pai = cv.parentElement;
+      const l = cv.clientWidth || (pai && pai.clientWidth) || window.innerWidth || 0;
+      const a = cv.clientHeight || (pai && pai.clientHeight) || window.innerHeight || 0;
+      if (!l || !a) return false;
+      const d = Math.min(window.devicePixelRatio || 1, 2);
+      if (l !== L || a !== A || d !== dpr) {
+        L = l; A = a; dpr = d;
+        cv.width = Math.max(1, Math.round(l * d));
+        cv.height = Math.max(1, Math.round(a * d));
+        ctx.setTransform(d, 0, 0, d, 0, 0);
+      }
+      return true;
     };
-    redimensionar();
-    window.addEventListener("resize", redimensionar, { passive: true });
 
     const nova = () => {
-      const L = cv.clientWidth, A = cv.clientHeight;
       const paraDireita = Math.random() > 0.35;
-      const incl = 0.30 + Math.random() * 0.22; /* radianos abaixo da horizontal */
+      const incl = 0.30 + Math.random() * 0.22;
+      /* velocidade e cauda proporcionais à largura: em tela estreita o risco
+         precisa ser mais curto e mais lento para dar tempo de ser visto */
+      const k = Math.max(0.34, Math.min(1, L / 1200));
       return {
-        x: paraDireita ? -80 + Math.random() * L * 0.55 : L * 0.45 + Math.random() * L * 0.7,
-        y: A * (0.03 + Math.random() * 0.22),
+        x: paraDireita ? -L * 0.12 + Math.random() * L * 0.45 : L * 0.55 + Math.random() * L * 0.55,
+        y: A * (0.04 + Math.random() * 0.19),
         dx: Math.cos(incl) * (paraDireita ? 1 : -1),
         dy: Math.sin(incl),
-        vel: 680 + Math.random() * 560,
-        cauda: 90 + Math.random() * 140,
+        vel: (700 + Math.random() * 540) * k,
+        cauda: (95 + Math.random() * 135) * k,
         esp: 1.0 + Math.random() * 1.1,
         t: 0,
-        dur: 0.7 + Math.random() * 0.5,
+        dur: 0.75 + Math.random() * 0.5,
       };
     };
 
@@ -556,14 +572,18 @@ function EstrelasCadentes({ ativo = true }) {
       ultimo = agora;
       if (document.hidden) return;
 
-      const L = cv.clientWidth, A = cv.clientHeight;
+      /* remede a cada ~20 quadros, e sempre enquanto não houver tamanho */
+      if (!L || !A || conta++ % 20 === 0) {
+        if (!medir()) return;
+      }
+
       ctx.clearRect(0, 0, L, A);
 
       proxima -= dt * 1000;
       if (proxima <= 0 && estrelas.length < 3) {
         estrelas.push(nova());
-        proxima = 2400 + Math.random() * 4200;
-        if (Math.random() < 0.12) proxima = 240; /* de vez em quando, duas seguidas */
+        proxima = 1700 + Math.random() * 3300;
+        if (Math.random() < 0.14) proxima = 260; /* de vez em quando, duas seguidas */
       }
 
       estrelas = estrelas.filter((e) => {
@@ -572,13 +592,12 @@ function EstrelasCadentes({ ativo = true }) {
         e.y += e.dy * e.vel * dt;
         if (e.t > e.dur) return false;
 
-        /* entra e sai suave */
         const p = e.t / e.dur;
         const env = Math.min(1, p / 0.18) * Math.min(1, (1 - p) / 0.42);
         /* some ao descer para a parte clara do céu */
         const alt = Math.max(0, Math.min(1, 1 - (e.y / A - 0.28) / 0.20));
         const a = env * alt;
-        if (a <= 0.01) return e.y < A && e.x > -300 && e.x < L + 300;
+        if (a <= 0.01) return e.y < A && e.x > -L * 0.4 && e.x < L * 1.4;
 
         const tx = e.x - e.dx * e.cauda;
         const ty = e.y - e.dy * e.cauda;
@@ -595,7 +614,6 @@ function EstrelasCadentes({ ativo = true }) {
         ctx.lineTo(tx, ty);
         ctx.stroke();
 
-        /* brilho da cabeça */
         const gr = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.esp * 3.2);
         gr.addColorStop(0, `rgba(255,250,242,${0.85 * a})`);
         gr.addColorStop(1, "rgba(255,250,242,0)");
@@ -608,11 +626,25 @@ function EstrelasCadentes({ ativo = true }) {
       });
     };
 
+    medir();
     raf = requestAnimationFrame(quadro);
+
+    /* ResizeObserver pega mudanças de layout que o evento resize não cobre */
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => medir());
+      ro.observe(cv);
+    }
+    const aoMudar = () => medir();
+    window.addEventListener("resize", aoMudar, { passive: true });
+    window.addEventListener("orientationchange", aoMudar, { passive: true });
+
     return () => {
       if (raf !== null) cancelAnimationFrame(raf);
-      window.removeEventListener("resize", redimensionar);
-      ctx.clearRect(0, 0, cv.clientWidth, cv.clientHeight);
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", aoMudar);
+      window.removeEventListener("orientationchange", aoMudar);
+      if (L && A) ctx.clearRect(0, 0, L, A);
     };
   }, [ativo]);
 
