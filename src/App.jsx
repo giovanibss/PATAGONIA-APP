@@ -355,7 +355,7 @@ function parseNum(texto) {
 
 /* ─────────────────────────  CAMPO EDITÁVEL  ───────────────────────── */
 
-function Editavel({ valor, onChange, className = "", numero = false, prefixo = "", multiline = false }) {
+function Editavel({ valor, onChange, className = "", numero = false, prefixo = "", multiline = false, exibir = null }) {
   const [editando, setEditando] = useState(false);
   const [rascunho, setRascunho] = useState(String(valor));
   const ref = useRef(null);
@@ -395,7 +395,7 @@ function Editavel({ valor, onChange, className = "", numero = false, prefixo = "
       className={`${className} group/ed inline-flex items-start gap-1.5 cursor-text rounded-md px-1 -mx-1 transition-colors hover:bg-[#fbebd9]/10 focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70`}
       title="Clique para editar"
     >
-      {prefixo}{valor}
+      {prefixo}{exibir !== null ? exibir : valor}
       <Pencil size={11} className="mt-1 shrink-0 opacity-0 group-hover/ed:opacity-60 transition-opacity" />
     </span>
   );
@@ -661,31 +661,51 @@ function EstrelasCadentes({ ativo = true }) {
 
 /* Código da reserva e link do voucher. É o que se mostra na portaria do
    parque ou no balcão do hotel — vale mais que o valor naquele momento. */
+/* Mostra o domínio em vez da URL inteira: "booking.com" cabe na caixa e
+   diz mais que "https://ww…". Se não for uma URL, corta no 10º caractere. */
+function resumoLink(u) {
+  const t = (u || "").trim();
+  if (!t) return "";
+  try {
+    const h = new URL(t).hostname.replace(/^www\./i, "");
+    return h.length > 20 ? h.slice(0, 19) + "…" : h;
+  } catch (e) {
+    return t.length <= 13 ? t : t.slice(0, 10) + "…";
+  }
+}
+
 function Localizador({ codigo, link, onChange }) {
-  const temLink = typeof link === "string" && /^https?:\/\//i.test(link.trim());
+  const bruto = typeof link === "string" ? link.trim() : "";
+  const temLink = /^https?:\/\//i.test(bruto);
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 min-w-0">
       <Ticket size={13} className="shrink-0 text-[#fbebd9]/45" />
-      <span className="text-sm font-mono tracking-wide">
+
+      <span className="text-sm font-mono tracking-wide min-w-0 max-w-[60%] truncate">
         <Editavel
           valor={codigo || "localizador"}
           onChange={(v) => onChange("localizador", v === "localizador" ? "" : v)}
           className={codigo ? "" : "text-[#fbebd9]/45 italic font-sans text-xs"}
         />
       </span>
-      {temLink ? (
+
+      {temLink && (
         <a
-          href={link.trim()}
+          href={bruto}
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-1 text-[11px] text-fuchsia-300 hover:text-fuchsia-200 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded px-1"
+          className="shrink-0 flex items-center gap-1 text-[11px] font-semibold text-fuchsia-300 hover:text-fuchsia-200 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded px-1"
         >
           <ExternalLink size={11} /> voucher
         </a>
-      ) : null}
-      <span className="text-[11px] text-[#fbebd9]/45">
+      )}
+
+      {/* editável, mas exibido curto para não estourar a caixa */}
+      <span className="text-[11px] text-[#fbebd9]/45 min-w-0 max-w-full truncate">
         <Editavel
           valor={link || "+ link"}
+          exibir={temLink ? resumoLink(bruto) : link ? resumoLink(link) : "+ link"}
           onChange={(v) => onChange("link", v === "+ link" ? "" : v)}
           className="italic"
         />
