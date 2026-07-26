@@ -517,7 +517,6 @@ function EstrelasCadentes({ ativo = true }) {
 
   useEffect(() => {
     if (!ativo) return;
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const cv = ref.current;
     if (!cv) return;
@@ -710,34 +709,17 @@ export default function App() {
   const [buscandoCambio, setBuscandoCambio] = useState(false);
   const [baseAberta, setBaseAberta] = useState({});
 
-  /* Tela estreita: a barra de abas flutua embaixo, ao alcance do polegar */
-  const [telaEstreita, setTelaEstreita] = useState(
-    typeof window !== "undefined" && window.matchMedia
-      ? window.matchMedia("(max-width: 639px)").matches
-      : false
-  );
-  useEffect(() => {
-    if (!window.matchMedia) return;
-    const mq = window.matchMedia("(max-width: 639px)");
-    const ao = (e) => setTelaEstreita(e.matches);
-    mq.addEventListener ? mq.addEventListener("change", ao) : mq.addListener(ao);
-    return () => {
-      mq.removeEventListener ? mq.removeEventListener("change", ao) : mq.removeListener(ao);
-    };
-  }, []);
 
   /* Progresso da rolagem no trecho do hero (0 = topo, 1 = hero dissolvido).
      Alimenta o crossfade entre o hero e os wallpapers. */
   const [rolagem, setRolagem] = useState(0);
   useEffect(() => {
-    const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let raf = null;
     const medir = () => {
       raf = null;
       const alcance = window.innerHeight * 0.75; /* dissolve ao longo de 75% da tela */
       setRolagem(Math.min(1, Math.max(0, window.scrollY / alcance)));
     };
-    if (reduzir) { setRolagem(0); return; }
     const aoRolar = () => { if (raf === null) raf = requestAnimationFrame(medir); };
     window.addEventListener("scroll", aoRolar, { passive: true });
     window.addEventListener("resize", aoRolar, { passive: true });
@@ -791,10 +773,22 @@ export default function App() {
   const primeiroSalvamento = useRef(true);
 
   useEffect(() => {
-    const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduzir) return;
     const t = setInterval(() => setFundo((i) => (i + 1) % FUNDOS.length), INTERVALO_FUNDO);
     return () => clearInterval(t);
+  }, []);
+
+  /* O zoom do hero é o único efeito que respeita "reduzir movimento":
+     parallax é o que de fato incomoda quem tem sensibilidade vestibular. */
+  const [movimentoOk, setMovimentoOk] = useState(true);
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const ao = (e) => setMovimentoOk(!e.matches);
+    setMovimentoOk(!mq.matches);
+    mq.addEventListener ? mq.addEventListener("change", ao) : mq.addListener(ao);
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener("change", ao) : mq.removeListener(ao);
+    };
   }, []);
 
   /* 1. Cache local primeiro — app abre instantâneo, funciona sem sinal */
@@ -1096,7 +1090,7 @@ export default function App() {
           src="/hero.jpg"
           alt=""
           className="absolute inset-0 w-full h-full object-cover object-center"
-          style={{ transform: `scale(${1 + rolagem * 0.08})`, transformOrigin: "50% 40%" }}
+          style={movimentoOk ? { transform: `scale(${1 + rolagem * 0.08})`, transformOrigin: "50% 40%" } : undefined}
         />
         <EstrelasCadentes ativo={rolagem < 0.85} />
         {/* escurece a base do hero para o conteúdo nascer legível */}
@@ -1150,20 +1144,12 @@ export default function App() {
 
 
 
-        {/* Abas — grudam no topo no desktop, flutuam embaixo no celular */}
+        {/* Abas — grudam no topo no desktop, flutuam embaixo no celular.
+            Sempre visíveis: navegação principal não pode depender de rolagem. */}
         <nav
-          className={`${vidro} rounded-2xl p-1.5 flex gap-1.5 transition-[opacity,transform] duration-300
-            barra-flutuante fixed inset-x-3 bottom-3 z-40 shadow-[0_10px_40px_rgba(0,0,0,0.6)]
+          className={`${vidro} rounded-2xl p-1.5 flex gap-1.5 z-40
+            barra-flutuante fixed inset-x-3 bottom-3 shadow-[0_10px_40px_rgba(0,0,0,0.6)]
             sm:sticky sm:inset-x-auto sm:bottom-auto sm:top-4 sm:z-30 sm:mb-6 sm:shadow-lg`}
-          style={
-            telaEstreita
-              ? {
-                  opacity: Math.max(0, Math.min(1, (rolagem - 0.12) / 0.22)),
-                  transform: `translateY(${(1 - Math.max(0, Math.min(1, (rolagem - 0.12) / 0.22))) * 18}px)`,
-                  pointerEvents: rolagem > 0.16 ? "auto" : "none",
-                }
-              : undefined
-          }
         >
           {[
             { id: "roteiro", rot: "Roteiro", Icone: CalendarDays },
