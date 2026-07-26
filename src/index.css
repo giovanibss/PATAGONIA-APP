@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: #0d0b14;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Barra de abas: gruda no topo respeitando o entalhe do iPhone */
+.barra-abas { top: 0.75rem; }
+@supports (top: max(0px)) {
+  .barra-abas { top: max(0.75rem, calc(env(safe-area-inset-top) + 0.5rem)); }
+}
