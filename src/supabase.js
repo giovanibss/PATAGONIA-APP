@@ -1,16 +1,48 @@
 import { createClient } from "@supabase/supabase-js";
 
-/* Credenciais vêm das variáveis de ambiente (.env.local no seu PC,
-   Environment Variables no Vercel). Sem elas, o app roda offline
-   usando apenas o localStorage. */
-const URL = import.meta.env.VITE_SUPABASE_URL;
-const CHAVE = import.meta.env.VITE_SUPABASE_KEY;
+/* ══════════════════════════════════════════════════════════════════
+   COLE AQUI AS SUAS CREDENCIAIS DO SUPABASE
+
+   Estão no painel do Supabase em: Project Settings → API Keys
+     • Project URL      → algo como https://abcdefgh.supabase.co
+     • Publishable key  → o texto longo (também chamada "anon")
+
+   Use a publishable/anon. NUNCA a service_role.
+
+   ⚠ Se estes dois campos ficarem vazios, o app funciona normalmente
+     mas só neste aparelho — sem sincronizar com o celular.
+   ══════════════════════════════════════════════════════════════════ */
+
+const URL_FIXA = "https://peznylswpogypvnhbqlc.supabase.co";
+const CHAVE_FIXA = "sb_publishable_26Mutfbq-7lE7rKDDCjxwg_OYculaSp";
+
+/* ══════════════════════════════════════════════════════════════════
+   Daqui para baixo não precisa mexer.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Usa o que estiver preenchido acima; se estiver vazio, tenta as
+   variáveis de ambiente (.env.local ou painel do Vercel). */
+const limpar = (v) => (typeof v === "string" ? v.trim() : "");
+
+const URL = limpar(URL_FIXA) || limpar(import.meta.env.VITE_SUPABASE_URL);
+const CHAVE = limpar(CHAVE_FIXA) || limpar(import.meta.env.VITE_SUPABASE_KEY);
 
 /* Identificador do roteiro. Todos os aparelhos que usarem o mesmo
    valor compartilham os mesmos dados. */
-export const ID_VIAGEM = import.meta.env.VITE_ID_VIAGEM || "patagonia-2026";
+export const ID_VIAGEM =
+  limpar(import.meta.env.VITE_ID_VIAGEM) || "patagonia-2026";
 
-export const configurado = Boolean(URL && CHAVE);
+/* Só considera configurado se a URL tiver cara de URL do Supabase e a
+   chave tiver tamanho plausível — evita "meio configurado" silencioso. */
+export const configurado =
+  /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(URL) && CHAVE.length > 20;
+
+if (!configurado && (URL || CHAVE)) {
+  console.warn(
+    "[Kooka] Credenciais do Supabase incompletas ou mal formadas — " +
+      "o app vai salvar apenas neste navegador. Confira src/supabase.js"
+  );
+}
 
 export const supabase = configurado ? createClient(URL, CHAVE) : null;
 
@@ -50,7 +82,10 @@ export function ouvirNuvem(aoMudar) {
       { event: "*", schema: "public", table: "viagens", filter: `id=eq.${ID_VIAGEM}` },
       (payload) => {
         if (payload.new?.dados) {
-          aoMudar({ dados: payload.new.dados, atualizadoEm: payload.new.atualizado_em });
+          aoMudar({
+            dados: payload.new.dados,
+            atualizadoEm: payload.new.atualizado_em,
+          });
         }
       }
     )
