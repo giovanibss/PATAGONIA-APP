@@ -505,6 +505,126 @@ function Pagamento({ l, aliquota, onChange, compacto = false }) {
   );
 }
 
+/* ─────────────────────────  ESTRELAS CADENTES  ───────────────────────── */
+
+/* Riscos rápidos no céu do hero. Vivem só na faixa superior, onde a imagem
+   é escura o bastante para o traço aparecer, e somem ao descer rumo ao sol. */
+function EstrelasCadentes({ ativo = true }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!ativo) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    let raf = null;
+    let estrelas = [];
+    let proxima = 400 + Math.random() * 900;
+    let ultimo = performance.now();
+
+    const redimensionar = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      cv.width = Math.max(1, Math.floor(cv.clientWidth * dpr));
+      cv.height = Math.max(1, Math.floor(cv.clientHeight * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    redimensionar();
+    window.addEventListener("resize", redimensionar, { passive: true });
+
+    const nova = () => {
+      const L = cv.clientWidth, A = cv.clientHeight;
+      const paraDireita = Math.random() > 0.35;
+      const incl = 0.30 + Math.random() * 0.22; /* radianos abaixo da horizontal */
+      return {
+        x: paraDireita ? -80 + Math.random() * L * 0.55 : L * 0.45 + Math.random() * L * 0.7,
+        y: A * (0.03 + Math.random() * 0.22),
+        dx: Math.cos(incl) * (paraDireita ? 1 : -1),
+        dy: Math.sin(incl),
+        vel: 680 + Math.random() * 560,
+        cauda: 90 + Math.random() * 140,
+        esp: 1.0 + Math.random() * 1.1,
+        t: 0,
+        dur: 0.7 + Math.random() * 0.5,
+      };
+    };
+
+    const quadro = (agora) => {
+      raf = requestAnimationFrame(quadro);
+      const dt = Math.min((agora - ultimo) / 1000, 0.05);
+      ultimo = agora;
+      if (document.hidden) return;
+
+      const L = cv.clientWidth, A = cv.clientHeight;
+      ctx.clearRect(0, 0, L, A);
+
+      proxima -= dt * 1000;
+      if (proxima <= 0 && estrelas.length < 3) {
+        estrelas.push(nova());
+        proxima = 2400 + Math.random() * 4200;
+        if (Math.random() < 0.12) proxima = 240; /* de vez em quando, duas seguidas */
+      }
+
+      estrelas = estrelas.filter((e) => {
+        e.t += dt;
+        e.x += e.dx * e.vel * dt;
+        e.y += e.dy * e.vel * dt;
+        if (e.t > e.dur) return false;
+
+        /* entra e sai suave */
+        const p = e.t / e.dur;
+        const env = Math.min(1, p / 0.18) * Math.min(1, (1 - p) / 0.42);
+        /* some ao descer para a parte clara do céu */
+        const alt = Math.max(0, Math.min(1, 1 - (e.y / A - 0.28) / 0.20));
+        const a = env * alt;
+        if (a <= 0.01) return e.y < A && e.x > -300 && e.x < L + 300;
+
+        const tx = e.x - e.dx * e.cauda;
+        const ty = e.y - e.dy * e.cauda;
+        const g = ctx.createLinearGradient(e.x, e.y, tx, ty);
+        g.addColorStop(0, `rgba(255,248,238,${0.95 * a})`);
+        g.addColorStop(0.35, `rgba(255,190,225,${0.42 * a})`);
+        g.addColorStop(1, "rgba(255,190,225,0)");
+
+        ctx.strokeStyle = g;
+        ctx.lineWidth = e.esp;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(e.x, e.y);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+
+        /* brilho da cabeça */
+        const gr = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.esp * 3.2);
+        gr.addColorStop(0, `rgba(255,250,242,${0.85 * a})`);
+        gr.addColorStop(1, "rgba(255,250,242,0)");
+        ctx.fillStyle = gr;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.esp * 3.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        return true;
+      });
+    };
+
+    raf = requestAnimationFrame(quadro);
+    return () => {
+      if (raf !== null) cancelAnimationFrame(raf);
+      window.removeEventListener("resize", redimensionar);
+      ctx.clearRect(0, 0, cv.clientWidth, cv.clientHeight);
+    };
+  }, [ativo]);
+
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden="true"
+      className="absolute inset-0 w-full h-full pointer-events-none"
+    />
+  );
+}
+
 /* ─────────────────────────  APP  ───────────────────────── */
 
 export default function App() {
@@ -874,6 +994,7 @@ export default function App() {
           className="absolute inset-0 w-full h-full object-cover object-center"
           style={{ transform: `scale(${1 + rolagem * 0.08})`, transformOrigin: "50% 40%" }}
         />
+        <EstrelasCadentes ativo={rolagem < 0.85} />
         {/* escurece a base do hero para o conteúdo nascer legível */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#0d0b14]/25 via-[#0d0b14]/45 to-[#0d0b14]" />
       </div>
