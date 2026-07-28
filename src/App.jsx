@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useId } from "react";
 import {
   Wallet, ListChecks, CalendarDays, MapPin, Clock,
   Check, Plus, Trash2, ChevronLeft, ChevronRight, AlertTriangle,
@@ -143,11 +143,11 @@ const HOSPEDAGENS_INICIAIS = [
 const ic = { carro: Car, barco: Ship, trilha: Footprints, comida: Utensils, ponto: MapPin };
 
 const ABAS = [
-  { id: "roteiro", rot: "Roteiro", Icone: CalendarDays },
-  { id: "checklist", rot: "Checklist", Icone: ListChecks },
-  { id: "hotel", rot: "Hospedagem", Icone: BedDouble },
-  { id: "custos", rot: "Lançamentos", Icone: NotaVoando },
-  { id: "financeiro", rot: "Financeiro", Icone: Banknote },
+  { id: "roteiro", rot: "Roteiro", Icone: IconeRoteiro },
+  { id: "checklist", rot: "Checklist", Icone: IconeChecklist },
+  { id: "hotel", rot: "Hospedagem", Icone: IconeHotel },
+  { id: "custos", rot: "Lançamentos", Icone: IconeCustos },
+  { id: "financeiro", rot: "Financeiro", Icone: IconeFinanceiro },
 ];
 
 const ROTEIRO_INICIAL = [
@@ -690,28 +690,178 @@ function EstrelasCadentes({ ativo = true }) {
   );
 }
 
-/* ─────────────────────────  ÍCONE PRÓPRIO  ───────────────────────── */
+/* ─────────────────────────  ÍCONES DIMENSIONAIS  ───────────────────────── */
 
-/* Nota voando — o Lucide não traz esse, então desenhamos no mesmo estilo
-   (traço de 2px, grade de 24, pontas arredondadas). */
-function NotaVoando({ size = 24, className = "" }) {
+/* Desenhados na paleta do próprio site: base com gradiente, face inferior
+   mais escura simulando extrusão, brilho no topo e sombra difusa.
+   useId dá um sufixo único a cada instância — sem isso, o mesmo ícone
+   repetido na barra e na coluna lateral brigaria pelos mesmos gradientes. */
+
+function IconeRoteiro({ size = 24, className = "" }) {
+  const uid = useId().replace(/:/g, "");
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <rect x="10" y="9" width="12" height="9" rx="2" />
-      <circle cx="16" cy="13.5" r="1.7" />
-      <path d="M10 12.2C7.5 8.5 4.5 7.2 2.2 8.4c-.2 2.9 1.7 5.4 4.6 6.4" />
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+      viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <defs>
+      <linearGradient id={`g${uid}a`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#f0abfc"/><stop offset="1" stopColor="#c026d3"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}b`} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stopColor="#a21caf"/><stop offset="1" stopColor="#701a75"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}h`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#fff" stopOpacity=".55"/>
+      <stop offset="1" stopColor="#fff" stopOpacity="0"/>
+      </linearGradient>
+      <filter id={`g${uid}s`} x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.5" floodColor="#4a044e" floodOpacity=".55"/>
+      </filter>
+      </defs>
+      <g filter={`url(#g${uid}s)`}>
+      <path d="M6.2 7.6h11.6a2 2 0 0 1 2 2v9.2a2 2 0 0 1-2 2H6.2a2 2 0 0 1-2-2V9.6a2 2 0 0 1 2-2z" fill={`url(#g${uid}b)`}/>
+      <path d="M6.2 6.2h11.6a2 2 0 0 1 2 2v2.4H4.2V8.2a2 2 0 0 1 2-2z" fill={`url(#g${uid}a)`}/>
+      <rect x="7.2" y="3.6" width="2.1" height="4" rx="1.05" fill="#f0abfc"/>
+      <rect x="14.7" y="3.6" width="2.1" height="4" rx="1.05" fill="#f0abfc"/>
+      <circle cx="9" cy="14.6" r="1.25" fill="#fbebd9" opacity=".92"/>
+      <circle cx="12.5" cy="14.6" r="1.25" fill="#fbebd9" opacity=".55"/>
+      <circle cx="16" cy="14.6" r="1.25" fill="#fbebd9" opacity=".3"/>
+      <circle cx="9" cy="18" r="1.25" fill="#fbebd9" opacity=".55"/>
+      <path d="M6.2 6.2h11.6a2 2 0 0 1 2 2v1.1H4.2V8.2a2 2 0 0 1 2-2z" fill={`url(#g${uid}h)`}/>
+      </g>
+    </svg>
+  );
+}
+
+function IconeChecklist({ size = 24, className = "" }) {
+  const uid = useId().replace(/:/g, "");
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+      viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <defs>
+      <linearGradient id={`g${uid}a`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#6ee7b7"/><stop offset="1" stopColor="#059669"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}b`} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stopColor="#047857"/><stop offset="1" stopColor="#064e3b"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}h`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#fff" stopOpacity=".55"/>
+      <stop offset="1" stopColor="#fff" stopOpacity="0"/>
+      </linearGradient>
+      <filter id={`g${uid}s`} x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.5" floodColor="#022c22" floodOpacity=".55"/>
+      </filter>
+      </defs>
+      <g filter={`url(#g${uid}s)`}>
+      <path d="M6 5.4h12a2 2 0 0 1 2 2v11.4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.4a2 2 0 0 1 2-2z" fill={`url(#g${uid}b)`}/>
+      <path d="M6 5.4h12a2 2 0 0 1 2 2v4.2H4V7.4a2 2 0 0 1 2-2z" fill={`url(#g${uid}a)`}/>
+      <rect x="8.4" y="2.6" width="7.2" height="3.6" rx="1.6" fill="#6ee7b7"/>
+      <path d="M7.8 14.6l2.6 2.6 5.4-5.6" stroke="#fbebd9" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <path d="M6 5.4h12a2 2 0 0 1 2 2v1H4v-1a2 2 0 0 1 2-2z" fill={`url(#g${uid}h)`}/>
+      </g>
+    </svg>
+  );
+}
+
+function IconeHotel({ size = 24, className = "" }) {
+  const uid = useId().replace(/:/g, "");
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+      viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <defs>
+      <linearGradient id={`g${uid}a`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#c4b5fd"/><stop offset="1" stopColor="#7c3aed"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}b`} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stopColor="#6d28d9"/><stop offset="1" stopColor="#4c1d95"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}h`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#fff" stopOpacity=".55"/>
+      <stop offset="1" stopColor="#fff" stopOpacity="0"/>
+      </linearGradient>
+      <filter id={`g${uid}s`} x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.5" floodColor="#2e1065" floodOpacity=".55"/>
+      </filter>
+      </defs>
+      <g filter={`url(#g${uid}s)`}>
+      <rect x="2.6" y="7" width="2.6" height="13" rx="1.3" fill={`url(#g${uid}a)`}/>
+      <path d="M4 12.4h14.4a3 3 0 0 1 3 3v3.2a1.4 1.4 0 0 1-1.4 1.4H4z" fill={`url(#g${uid}b)`}/>
+      <path d="M4 12.4h14.4a3 3 0 0 1 3 3v.9H4z" fill={`url(#g${uid}a)`}/>
+      <rect x="6" y="8.6" width="6.4" height="3.8" rx="1.7" fill="#fbebd9" opacity=".92"/>
+      <rect x="6" y="8.6" width="6.4" height="1.6" rx=".8" fill="#fff" opacity=".45"/>
+      <rect x="5.4" y="20" width="1.9" height="1.8" rx=".9" fill="#4c1d95"/>
+      <rect x="19" y="20" width="1.9" height="1.8" rx=".9" fill="#4c1d95"/>
+      </g>
+    </svg>
+  );
+}
+
+function IconeCustos({ size = 24, className = "" }) {
+  const uid = useId().replace(/:/g, "");
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+      viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <defs>
+      <linearGradient id={`g${uid}a`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#fdba74"/><stop offset="1" stopColor="#ea580c"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}b`} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stopColor="#c2410c"/><stop offset="1" stopColor="#7c2d12"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}h`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#fff" stopOpacity=".55"/>
+      <stop offset="1" stopColor="#fff" stopOpacity="0"/>
+      </linearGradient>
+      <filter id={`g${uid}s`} x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.5" floodColor="#431407" floodOpacity=".55"/>
+      </filter>
+      </defs>
+      <g filter={`url(#g${uid}s)`}>
+      <path d="M1.8 19.4c2.1-2 4.2 0 6.3-2M2.2 22.4h8.6" stroke="#fbebd9" strokeWidth="2.5"
+      strokeLinecap="round" fill="none" opacity=".92"/>
+      <g transform="rotate(45 12 12)">
+      <path d="M8.7 10.2a3.3 3.3 0 0 1 6.6 0v6.9H8.7z" fill={`url(#g${uid}b)`}/>
+      <path d="M8.7 10.2a3.3 3.3 0 0 1 3.3-3.3v10.2H8.7z" fill={`url(#g${uid}a)`}/>
+      <rect x="8.7" y="17.1" width="6.6" height="1.9" fill="#7c2d12"/>
+      <path d="M8.7 19h6.6L12 22.4z" fill="#fdba74"/>
+      <path d="M12 19h3.3L12 22.4z" fill="#ea580c"/>
+      <path d="M11.2 20.4h1.6L12 22.4z" fill="#fbebd9"/>
+      </g>
+      </g>
+    </svg>
+  );
+}
+
+function IconeFinanceiro({ size = 24, className = "" }) {
+  const uid = useId().replace(/:/g, "");
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
+      viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <defs>
+      <linearGradient id={`g${uid}a`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#f9a8d4"/><stop offset="1" stopColor="#db2777"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}b`} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stopColor="#be185d"/><stop offset="1" stopColor="#831843"/>
+      </linearGradient>
+      <linearGradient id={`g${uid}h`} x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stopColor="#fff" stopOpacity=".55"/>
+      <stop offset="1" stopColor="#fff" stopOpacity="0"/>
+      </linearGradient>
+      <filter id={`g${uid}s`} x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="1.6" stdDeviation="1.5" floodColor="#500724" floodOpacity=".55"/>
+      </filter>
+      </defs>
+      <g filter={`url(#g${uid}s)`}>
+      <path d="M4.4 6.4h15.2a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2H4.4a2 2 0 0 1-2-2V8.4a2 2 0 0 1 2-2z" fill={`url(#g${uid}b)`}/>
+      <path d="M4.4 6.4h15.2a2 2 0 0 1 2 2v2.2H2.4V8.4a2 2 0 0 1 2-2z" fill={`url(#g${uid}a)`}/>
+      <path d="M4.4 6.4h15.2a2 2 0 0 1 2 2v.9H2.4v-.9a2 2 0 0 1 2-2z" fill={`url(#g${uid}h)`}/>
+      <circle cx="16.4" cy="16.4" r="5" fill="#f9a8d4"/>
+      <circle cx="16.4" cy="16.4" r="5" fill={`url(#g${uid}h)`}/>
+      <circle cx="16.4" cy="16.4" r="3.5" fill="#db2777" opacity=".35"/>
+      <path d="M16.4 13.9v5M18 15.1c0-.7-.8-1.2-1.6-1.2s-1.6.5-1.6 1.2.7 1 1.6 1.3 1.6.6 1.6 1.3-.7 1.2-1.6 1.2-1.6-.5-1.6-1.2"
+      stroke="#fbebd9" strokeWidth="1.15" strokeLinecap="round" fill="none"/>
+      </g>
     </svg>
   );
 }
@@ -1393,11 +1543,14 @@ export default function App() {
               key={id}
               onClick={() => setAba(id)}
               title={rot}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-titulo text-sm font-medium uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
-                aba === id ? "bg-[#fbebd9] text-[#0d0b14] shadow-lg" : "text-[#fbebd9]/65 hover:bg-[#fbebd9]/10"
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl font-titulo text-sm font-medium uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                aba === id
+                  ? "bg-[#fbebd9]/[0.14] ring-1 ring-fuchsia-300/40 text-[#fbebd9] shadow-inner"
+                  : "text-[#fbebd9]/55 hover:bg-[#fbebd9]/[0.07]"
               }`}
             >
-              <Icone size={15} /> <span className="hidden sm:inline">{rot}</span>
+              <Icone size={20} className={`shrink-0 transition-opacity ${aba === id ? "" : "opacity-60"}`} />
+              <span className="hidden sm:inline">{rot}</span>
             </button>
           ))}
         </nav>
@@ -1418,11 +1571,14 @@ export default function App() {
               onClick={() => setAba(id)}
               title={rot}
               tabIndex={lateral ? 0 : -1}
-              className={`flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-titulo text-[9px] font-medium uppercase tracking-[0.06em] leading-none transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
-                aba === id ? "bg-[#fbebd9] text-[#0d0b14] shadow-lg" : "text-[#fbebd9]/65 hover:bg-[#fbebd9]/10"
+              className={`flex flex-col items-center justify-center gap-1.5 py-3 rounded-2xl font-titulo text-[9px] font-medium uppercase tracking-[0.06em] leading-none transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                aba === id
+                  ? "bg-[#fbebd9]/[0.14] ring-1 ring-fuchsia-300/40 text-[#fbebd9]"
+                  : "text-[#fbebd9]/55 hover:bg-[#fbebd9]/[0.07]"
               }`}
             >
-              <Icone size={19} /> <span>{rot}</span>
+              <Icone size={26} className={`transition-opacity ${aba === id ? "" : "opacity-60"}`} />
+              <span>{rot}</span>
             </button>
           ))}
         </nav>
