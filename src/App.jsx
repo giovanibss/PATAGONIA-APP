@@ -29,7 +29,7 @@ const IOF_PADRAO = 3.5;
 
 const STATUS = {
   pago:      { rot: "Quitado",           curto: "Quitado",  cor: "emerald", desc: "Já saiu da conta: espécie, débito ou fatura paga" },
-  faturar:   { rot: "Cai na fatura",     curto: "Fatura",   cor: "amber",   desc: "Reservado, ainda vai vencer no cartão" },
+  faturar:   { rot: "Faturas futuras",   curto: "Fatura",   cor: "amber",   desc: "Reservado, ainda vai vencer no cartão" },
   chegada:   { rot: "A pagar na chegada",curto: "Chegada",  cor: "sky",     desc: "Reservado, paga no local" },
   aberto:    { rot: "Não reservado",     curto: "Aberto",   cor: "slate",   desc: "Ainda sem reserva" },
 };
@@ -141,6 +141,14 @@ const HOSPEDAGENS_INICIAIS = [
 ];
 
 const ic = { carro: Car, barco: Ship, trilha: Footprints, comida: Utensils, ponto: MapPin };
+
+const ABAS = [
+  { id: "roteiro", rot: "Roteiro", Icone: CalendarDays },
+  { id: "checklist", rot: "Checklist", Icone: ListChecks },
+  { id: "hotel", rot: "Hospedagem", Icone: BedDouble },
+  { id: "custos", rot: "Lançamentos", Icone: NotaVoando },
+  { id: "financeiro", rot: "Financeiro", Icone: Banknote },
+];
 
 const ROTEIRO_INICIAL = [
   { id: "d1", n: 1, data: "06/12", titulo: "Chegada a El Calafate e Laguna Nimez", base: "El Calafate", nota: "Voo chega às 16:00 (FTE)", custo: 220, atividades: [
@@ -270,26 +278,27 @@ function migrar(bruto) {
   /* Ficha das passagens aéreas — criada uma vez só. A marca impede que
      ela reapareça caso você a apague depois. */
   e.marcas = e.marcas || {};
+  const fichaFixa = (id, nome, fixo, extra = {}) => ({
+    id, nome, fixo, diaId: null, valor: 0, moeda: "BRL",
+    status: "faturar", pagamento: "credito", iofIsento: true,
+    parcelas: 1, mesFatura: null, localizador: "", link: "", ...extra,
+  });
+
   if (!e.marcas.passagens) {
-    e.custos = [
-      {
-        id: "c-passagens",
-        nome: "Passagens aéreas",
-        diaId: null,
-        valor: 0,
-        moeda: "BRL",
-        status: "faturar",
-        pagamento: "credito",
-        iofIsento: true, /* compra em reais no Brasil não tem IOF */
-        parcelas: 1,
-        mesFatura: null,
-        localizador: "",
-        link: "",
-      },
-      ...(e.custos || []),
-    ];
+    e.custos = [fichaFixa("c-passagens", "Passagens aéreas", "passagens"), ...(e.custos || [])];
     e.marcas.passagens = true;
   }
+  if (!e.marcas.carro) {
+    e.custos = [
+      ...(e.custos || []),
+      fichaFixa("c-carro", "Aluguel do carro", "carro", { moeda: "USD", iofIsento: false }),
+    ];
+    e.marcas.carro = true;
+  }
+  /* fichas antigas de passagens ganham a marca */
+  e.custos = (e.custos || []).map((c) =>
+    c.id === "c-passagens" && !c.fixo ? { ...c, fixo: "passagens" } : c
+  );
 
   /* o lanc do dia deixa de existir para não contar em dobro */
   e.roteiro = (e.roteiro || []).map(({ lanc: _l, custo: _c, ...d }) => d);
@@ -700,11 +709,9 @@ function NotaVoando({ size = 24, className = "" }) {
       className={className}
       aria-hidden="true"
     >
-      <rect x="8" y="7" width="14" height="10" rx="2" />
-      <circle cx="15" cy="12" r="2" />
-      <path d="M2 9h4" />
-      <path d="M1 12.5h5" />
-      <path d="M2 16h4" />
+      <rect x="10" y="9" width="12" height="9" rx="2" />
+      <circle cx="16" cy="13.5" r="1.7" />
+      <path d="M10 12.2C7.5 8.5 4.5 7.2 2.2 8.4c-.2 2.9 1.7 5.4 4.6 6.4" />
     </svg>
   );
 }
@@ -766,6 +773,68 @@ function Localizador({ codigo, link, onChange }) {
   );
 }
 
+/* ─────────────────────────  FICHA DE CUSTO  ───────────────────────── */
+
+function FichaCusto({ c, dias, iof, cambio, atualizar, remover, comDia = true }) {
+  const st = STATUS[c.status] || STATUS.aberto;
+  const cor = CORES[st.cor];
+  const usd = lancEmUSD(c, cambio, iof);
+  return (
+    <div className={`group rounded-xl border p-4 ${cor.bg} ${cor.bd}`}>
+      <div className="flex items-start gap-3 mb-3">
+        <span className={`shrink-0 w-1.5 h-9 rounded-full mt-0.5 ${cor.solid}`} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[15px] font-semibold">
+            <Editavel valor={c.nome} onChange={(v) => atualizar(c.id, "nome", v)} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+            {comDia && (
+              <select
+                value={c.diaId || ""}
+                onChange={(e) => atualizar(c.id, "diaId", e.target.value || null)}
+                aria-label="Dia da viagem"
+                className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
+              >
+                <option value="">Sem dia</option>
+                {dias.map((x) => (
+                  <option key={x.id} value={x.id}>Dia {x.n} · {x.data}</option>
+                ))}
+              </select>
+            )}
+            <select
+              value={c.moeda}
+              onChange={(e) => atualizar(c.id, "moeda", e.target.value)}
+              aria-label="Moeda"
+              className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
+            >
+              {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <span className="text-sm font-semibold tabular-nums">
+              <Editavel valor={c.valor} numero onChange={(v) => atualizar(c.id, "valor", v)} />
+            </span>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="text-base font-bold text-pink-300 tabular-nums">US$ {fmtUSD(usd)}</div>
+          {remover && (
+            <button
+              onClick={() => remover(c.id)}
+              aria-label="Excluir ficha"
+              className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+      <Pagamento l={c} aliquota={iof} compacto onChange={(campo, v) => atualizar(c.id, campo, v)} />
+      <div className="mt-2.5 pt-2.5 border-t border-[#fbebd9]/10">
+        <Localizador codigo={c.localizador} link={c.link} onChange={(campo, v) => atualizar(c.id, campo, v)} />
+      </div>
+    </div>
+  );
+}
+
 /* ─────────────────────────  APP  ───────────────────────── */
 
 export default function App() {
@@ -790,6 +859,23 @@ export default function App() {
   const [abrirCambio, setAbrirCambio] = useState(false);
   const [buscandoCambio, setBuscandoCambio] = useState(false);
   const [baseAberta, setBaseAberta] = useState({});
+
+  /* No desktop, a barra horizontal cede lugar à coluna lateral ao rolar */
+  const [telaLarga, setTelaLarga] = useState(
+    typeof window !== "undefined" && window.matchMedia
+      ? window.matchMedia("(min-width: 1024px)").matches
+      : false
+  );
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const ao = (e) => setTelaLarga(e.matches);
+    setTelaLarga(mq.matches);
+    mq.addEventListener ? mq.addEventListener("change", ao) : mq.addListener(ao);
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener("change", ao) : mq.removeListener(ao);
+    };
+  }, []);
 
 
   /* Progresso da rolagem no trecho do hero (0 = topo, 1 = hero dissolvido).
@@ -1114,6 +1200,16 @@ export default function App() {
   const total = fin.total;
   const pct = Math.min(100, (total / (estado.orcamento || 1)) * 100);
   const pctPago = Math.min(100, (fin.pago / (estado.orcamento || 1)) * 100);
+  const lateral = telaLarga && rolagem > 0.5;
+
+  /* Financeiro pode ser lido em dólar ou em real. A conversão usa a mesma
+     cotação do painel de câmbio: BRL = US$ ÷ (valor de 1 real em dólar). */
+  const [vista, setVista] = useState("USD");
+  const taxaBRL = Number(estado.cambio?.BRL) || 0;
+  const emVista = (usd) => (vista === "BRL" && taxaBRL > 0 ? usd / taxaBRL : usd);
+  const simbolo = vista === "BRL" && taxaBRL > 0 ? "R$" : "US$";
+  const fv = (usd) => `${simbolo} ${fmt(emVista(usd))}`;
+  const fvd = (usd) => `${simbolo} ${fmtUSD(emVista(usd))}`;
   const temOrcamento = Number(estado.orcamento) > 0;
   const restante = estado.orcamento - total;
   const feitos = estado.alertas.filter((a) => a.feito).length;
@@ -1285,32 +1381,48 @@ export default function App() {
 
 
 
-        {/* Abas — grudam no topo ao rolar, em qualquer tamanho de tela.
-            Sempre visíveis: navegação principal não pode depender de rolagem. */}
+        {/* Abas — barra horizontal no fluxo; no desktop, ao rolar, ela cede
+            lugar a uma coluna lateral. As duas fazem crossfade. */}
         <nav
-          className={`${vidro} barra-abas z-40 shadow-[0_8px_30px_rgba(0,0,0,0.45)]
-            sticky rounded-2xl p-1.5 mb-6 flex gap-1.5
-            lg:fixed lg:left-5 lg:top-1/2 lg:-translate-y-1/2 lg:mb-0
-            lg:flex-col lg:gap-1 lg:p-2 lg:w-[86px] lg:rounded-3xl`}
+          className={`${vidro} barra-abas sticky lg:static z-40 rounded-2xl p-1.5 mb-6 flex gap-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)] transition-opacity duration-300`}
+          style={lateral ? { opacity: 0, pointerEvents: "none" } : undefined}
+          aria-hidden={lateral}
         >
-          {[
-            { id: "roteiro", rot: "Roteiro", Icone: CalendarDays },
-            { id: "checklist", rot: "Checklist", Icone: ListChecks },
-            { id: "hotel", rot: "Hospedagem", Icone: BedDouble },
-            { id: "custos", rot: "Lançamentos", Icone: NotaVoando },
-            { id: "financeiro", rot: "Financeiro", Icone: Banknote },
-          ].map(({ id, rot, Icone }) => (
+          {ABAS.map(({ id, rot, Icone }) => (
             <button
               key={id}
               onClick={() => setAba(id)}
               title={rot}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-titulo text-sm font-medium uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70
-                lg:flex-none lg:flex-col lg:gap-1 lg:py-3 lg:rounded-2xl ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-titulo text-sm font-medium uppercase tracking-wider transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
                 aba === id ? "bg-[#fbebd9] text-[#0d0b14] shadow-lg" : "text-[#fbebd9]/65 hover:bg-[#fbebd9]/10"
               }`}
             >
-              <Icone size={15} className="lg:w-[19px] lg:h-[19px]" />
-              <span className="hidden sm:inline lg:text-[9px] lg:tracking-[0.06em] lg:leading-none">{rot}</span>
+              <Icone size={15} /> <span className="hidden sm:inline">{rot}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* Coluna lateral — só no desktop, surge quando a barra sai de vista */}
+        <nav
+          className={`${vidro} hidden lg:flex fixed left-5 top-1/2 z-40 flex-col gap-1 p-2 w-[86px] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.55)] transition-[opacity,transform] duration-300`}
+          style={{
+            opacity: lateral ? 1 : 0,
+            pointerEvents: lateral ? "auto" : "none",
+            transform: `translateY(-50%) translateX(${lateral ? 0 : -14}px)`,
+          }}
+          aria-hidden={!lateral}
+        >
+          {ABAS.map(({ id, rot, Icone }) => (
+            <button
+              key={id}
+              onClick={() => setAba(id)}
+              title={rot}
+              tabIndex={lateral ? 0 : -1}
+              className={`flex flex-col items-center justify-center gap-1 py-3 rounded-2xl font-titulo text-[9px] font-medium uppercase tracking-[0.06em] leading-none transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                aba === id ? "bg-[#fbebd9] text-[#0d0b14] shadow-lg" : "text-[#fbebd9]/65 hover:bg-[#fbebd9]/10"
+              }`}
+            >
+              <Icone size={19} /> <span>{rot}</span>
             </button>
           ))}
         </nav>
@@ -1463,6 +1575,26 @@ export default function App() {
         {/* FINANCEIRO */}
         {aba === "financeiro" && (
           <div className="space-y-3">
+            {/* Moeda de leitura */}
+            <div className="flex items-center justify-end gap-2">
+              <span className="text-[11px] text-[#fbebd9]/50 uppercase tracking-wider font-titulo">Ver em</span>
+              <div className={`${vidro} rounded-xl p-1 flex gap-1`}>
+                {[["USD", "US$"], ["BRL", "R$"]].map(([cod, rot]) => (
+                  <button
+                    key={cod}
+                    onClick={() => setVista(cod)}
+                    disabled={cod === "BRL" && taxaBRL <= 0}
+                    aria-pressed={vista === cod}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all disabled:opacity-30 focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                      vista === cod ? "bg-[#fbebd9] text-[#0d0b14]" : "text-[#fbebd9]/60 hover:bg-[#fbebd9]/10"
+                    }`}
+                  >
+                    {rot}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Orçamento — em destaque, porque é o que dá sentido à folga */}
             <div className={`${vidro} rounded-2xl p-5 border-fuchsia-400/25`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1487,7 +1619,7 @@ export default function App() {
                         {restante >= 0 ? "Folga" : "Acima do orçamento"}
                       </div>
                       <div className={`text-2xl font-bold tabular-nums ${restante >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                        US$ {fmt(Math.abs(restante))}
+                        {fv(Math.abs(restante))}
                       </div>
                       <div className="text-[11px] text-[#fbebd9]/50 tabular-nums">
                         {Math.round(pct)}% comprometido
@@ -1512,7 +1644,7 @@ export default function App() {
                   </div>
                   <div className="flex justify-between mt-1.5 text-[10px] text-[#fbebd9]/50">
                     <span><span className="text-emerald-300">■</span> quitado · <span className="text-orange-300">■</span> a pagar</span>
-                    {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: US$ {fmt(fin.iof)}</span>}
+                    {fin.iof > 0 && <span className="text-rose-300/70">IOF embutido: {fv(fin.iof)}</span>}
                   </div>
                 </div>
               )}
@@ -1521,9 +1653,9 @@ export default function App() {
             {/* Panorama */}
             <div className={`${vidro} rounded-2xl p-5 grid grid-cols-3 gap-4`}>
               {[
-                { rot: "Quitado", val: `US$ ${fmt(fin.pago)}`, cor: "text-emerald-300" },
-                { rot: "A pagar", val: `US$ ${fmt(fin.pendente)}`, cor: "text-orange-300" },
-                { rot: "Total", val: `US$ ${fmt(total)}` },
+                { rot: "Quitado", val: fv(fin.pago), cor: "text-emerald-300" },
+                { rot: "A pagar", val: fv(fin.pendente), cor: "text-orange-300" },
+                { rot: "Total", val: fv(total) },
               ].map((k, i) => (
                 <div key={i}>
                   <div className="font-titulo text-[11px] uppercase tracking-[0.2em] text-[#fbebd9]/60 mb-1">{k.rot}</div>
@@ -1543,9 +1675,9 @@ export default function App() {
                 <div className="flex items-center gap-3 shrink-0">
                   {!abrirFin && (
                     <span className="text-sm tabular-nums">
-                      <span className="text-emerald-300 font-bold">US$ {fmt(fin.pago)}</span>
+                      <span className="text-emerald-300 font-bold">{fv(fin.pago)}</span>
                       <span className="text-[#fbebd9]/50 mx-1">·</span>
-                      <span className="text-orange-300 font-bold">US$ {fmt(fin.pendente)}</span>
+                      <span className="text-orange-300 font-bold">{fv(fin.pendente)}</span>
                     </span>
                   )}
                   <ChevronDown size={18} className={`text-[#fbebd9]/50 transition-transform duration-300 ${abrirFin ? "rotate-180" : ""}`} />
@@ -1562,7 +1694,7 @@ export default function App() {
                   return (
                     <div key={k} className={`rounded-xl border p-3.5 ${c.bg} ${c.bd}`}>
                       <div className={`text-[10px] uppercase tracking-widest mb-1 ${c.txt}`}>{st.rot}</div>
-                      <div className="text-xl font-bold tabular-nums">US$ {fmt(v)}</div>
+                      <div className="text-xl font-bold tabular-nums">{fv(v)}</div>
                       <div className="text-[10px] text-[#fbebd9]/50 mt-0.5">{n} {n === 1 ? "item" : "itens"}</div>
                     </div>
                   );
@@ -1572,33 +1704,33 @@ export default function App() {
               <div className="space-y-2 pt-4 border-t border-[#fbebd9]/15">
                 <div className="flex items-baseline justify-between text-sm">
                   <span className="text-emerald-300 font-semibold">Gasto alocado pago</span>
-                  <span className="tabular-nums font-bold text-emerald-300">US$ {fmt(fin.pago)}</span>
+                  <span className="tabular-nums font-bold text-emerald-300">{fv(fin.pago)}</span>
                 </div>
                 <div className="flex items-baseline justify-between text-sm">
                   <span className="text-orange-300 font-semibold">Gasto alocado pendente</span>
-                  <span className="tabular-nums font-bold text-orange-300">US$ {fmt(fin.pendente)}</span>
+                  <span className="tabular-nums font-bold text-orange-300">{fv(fin.pendente)}</span>
                 </div>
                 <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/55 pl-3">
                   <span>· na fatura antes da viagem</span>
-                  <span className="tabular-nums">US$ {fmt(fin.faturar)}</span>
+                  <span className="tabular-nums">{fv(fin.faturar)}</span>
                 </div>
                 <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/55 pl-3">
                   <span>· a pagar na chegada</span>
-                  <span className="tabular-nums">US$ {fmt(fin.chegada)}</span>
+                  <span className="tabular-nums">{fv(fin.chegada)}</span>
                 </div>
                 <div className="flex items-baseline justify-between text-xs text-[#fbebd9]/55 pl-3">
                   <span>· ainda sem reserva</span>
-                  <span className="tabular-nums">US$ {fmt(fin.aberto)}</span>
+                  <span className="tabular-nums">{fv(fin.aberto)}</span>
                 </div>
                 {fin.iof > 0 && (
                   <div className="flex items-baseline justify-between text-xs text-rose-300/80 pt-2 border-t border-[#fbebd9]/10">
                     <span>IOF incluído nos valores acima</span>
-                    <span className="tabular-nums">US$ {fmt(fin.iof)}</span>
+                    <span className="tabular-nums">{fv(fin.iof)}</span>
                   </div>
                 )}
                 <div className="flex items-baseline justify-between pt-3 border-t border-[#fbebd9]/15">
                   <span className="text-sm uppercase tracking-widest text-[#fbebd9]/50">Total</span>
-                  <span className="text-3xl font-black tabular-nums">US$ {fmt(total)}</span>
+                  <span className="text-3xl font-black tabular-nums">{fv(total)}</span>
                 </div>
               </div>
 
@@ -1610,7 +1742,7 @@ export default function App() {
                   </span>
                 </div>
                 <div className="text-xs text-[#fbebd9]/50 text-right">
-                  Passeios US$ {fmt(totalRoteiro)} · Hospedagem US$ {fmt(totalHosp)}
+                  Passeios {fv(totalRoteiro)} · Hospedagem {fv(totalHosp)}
                 </div>
               </div>
                 </div>
@@ -1713,7 +1845,7 @@ export default function App() {
                       <span className="text-sm font-bold uppercase tracking-wider text-orange-300">
                         {rotuloFatura(f.mes)}
                       </span>
-                      <span className="text-base font-bold tabular-nums">US$ {fmtUSD(f.total)}</span>
+                      <span className="text-base font-bold tabular-nums">{fvd(f.total)}</span>
                     </div>
                     <ul className="divide-y divide-[#fbebd9]/[0.06]">
                       {f.itens.map((it, i) => (
@@ -1724,7 +1856,7 @@ export default function App() {
                               <span className="ml-2 text-[10px] font-bold text-orange-300/80">{it.parcela}</span>
                             )}
                           </span>
-                          <span className="shrink-0 tabular-nums text-[#fbebd9]/70">US$ {fmtUSD(it.usd)}</span>
+                          <span className="shrink-0 tabular-nums text-[#fbebd9]/70">{fvd(it.usd)}</span>
                         </li>
                       ))}
                     </ul>
@@ -1737,7 +1869,7 @@ export default function App() {
                   <span className="text-sm text-orange-300">
                     Sem mês definido — defina em Lançamentos para entrar no cronograma
                   </span>
-                  <span className="text-sm font-bold tabular-nums text-orange-300">US$ {fmtUSD(faturas.semMes)}</span>
+                  <span className="text-sm font-bold tabular-nums text-orange-300">{fvd(faturas.semMes)}</span>
                 </div>
               )}
 
@@ -1745,7 +1877,7 @@ export default function App() {
                 <div className="mt-4 pt-3 border-t border-[#fbebd9]/10 flex items-baseline justify-between">
                   <span className="text-sm uppercase tracking-widest text-[#fbebd9]/50">Total nas faturas</span>
                   <span className="text-xl font-bold tabular-nums text-orange-300">
-                    US$ {fmtUSD(faturas.lista.reduce((t, f) => t + f.total, 0) + faturas.semMes)}
+                    {fvd(faturas.lista.reduce((t, f) => t + f.total, 0) + faturas.semMes)}
                   </span>
                 </div>
               )}
@@ -1756,6 +1888,44 @@ export default function App() {
         {/* LANÇAMENTOS */}
         {aba === "custos" && (
           <div className="space-y-3">
+            {/* Passagens aéreas — ficha própria */}
+            {(estado.custos || []).filter((c) => c.fixo === "passagens").map((c) => (
+              <div key={c.id} className={`${vidro} rounded-2xl p-6`}>
+                <h3 className="font-titulo text-lg font-medium tracking-wide mb-1">Passagens aéreas</h3>
+                <p className="text-sm text-[#fbebd9]/50 mb-4">
+                  Não pertence a um dia do roteiro. Se foi parcelada, defina o mês da
+                  primeira fatura e o número de parcelas — elas entram no cronograma.
+                </p>
+                <FichaCusto
+                  c={c}
+                  dias={estado.roteiro}
+                  iof={estado.iof}
+                  cambio={estado.cambio}
+                  atualizar={atualizarCusto}
+                  comDia={false}
+                />
+              </div>
+            ))}
+
+            {/* Aluguel do carro — ficha própria */}
+            {(estado.custos || []).filter((c) => c.fixo === "carro").map((c) => (
+              <div key={c.id} className={`${vidro} rounded-2xl p-6`}>
+                <h3 className="font-titulo text-lg font-medium tracking-wide mb-1">Aluguel do carro</h3>
+                <p className="text-sm text-[#fbebd9]/50 mb-4">
+                  Diárias, seguro e a autorização para cruzar a fronteira. Lembre que a
+                  locadora costuma cobrar em dólar e o cartão soma IOF.
+                </p>
+                <FichaCusto
+                  c={c}
+                  dias={estado.roteiro}
+                  iof={estado.iof}
+                  cambio={estado.cambio}
+                  atualizar={atualizarCusto}
+                  comDia={false}
+                />
+              </div>
+            ))}
+
             {/* Fichas de custo */}
             <div className={`${vidro} rounded-2xl p-6`}>
               <h3 className="font-titulo text-lg font-medium tracking-wide mb-1">Fichas de custo</h3>
@@ -1763,26 +1933,22 @@ export default function App() {
                 Cada gasto é uma ficha atrelada a um dia. Os totais por dia aparecem no Roteiro.
               </p>
 
-              {(estado.custos || []).length === 0 && (
-                <p className="text-sm text-[#fbebd9]/50 italic py-4 text-center">
-                  Nenhuma ficha ainda. Use o botão de um dos dias abaixo para começar.
-                </p>
-              )}
-
               <div className="space-y-5">
                 {[...estado.roteiro, null].map((d) => {
-                  const fichas = (estado.custos || []).filter((c) => (d ? c.diaId === d.id : !c.diaId || !estado.roteiro.some((x) => x.id === c.diaId)));
-                  if (!d && fichas.length === 0) return null; /* "Sem dia" só aparece se tiver ficha */
+                  const fichas = (estado.custos || []).filter((c) =>
+                    !c.fixo && (d ? c.diaId === d.id : !c.diaId || !estado.roteiro.some((x) => x.id === c.diaId))
+                  );
+                  if (!d && fichas.length === 0) return null;
                   const subtotal = fichas.reduce((s, c) => s + lancEmUSD(c, estado.cambio, estado.iof), 0);
                   return (
                     <section key={d ? d.id : "sem-dia"}>
                       <div className="flex items-center gap-3 mb-2">
                         <div className="flex items-baseline gap-2 min-w-0">
-                          <span className="text-sm font-black shrink-0">
+                          <span className="font-titulo text-base font-medium tracking-wide shrink-0">
                             {d ? `Dia ${d.n}` : "Sem dia"}
                           </span>
-                          {d && <span className="text-[11px] text-[#fbebd9]/55 shrink-0">{d.data}</span>}
-                          {d && <span className="text-[11px] text-[#fbebd9]/55 truncate hidden sm:inline">· {d.titulo}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/50 shrink-0">{d.data}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/50 truncate hidden sm:inline">· {d.titulo}</span>}
                         </div>
                         <div className="flex-1 border-t border-[#fbebd9]/10" />
                         {subtotal > 0 && (
@@ -1806,70 +1972,18 @@ export default function App() {
                         <p className="text-xs text-[#fbebd9]/45 italic pl-1">Sem lançamentos.</p>
                       ) : (
                         <ul className="space-y-2.5">
-                          {fichas.map((c) => {
-                            const st = STATUS[c.status] || STATUS.aberto;
-                            const cor = CORES[st.cor];
-                            const usd = lancEmUSD(c, estado.cambio, estado.iof);
-                            return (
-                              <li key={c.id} className={`group rounded-xl border p-4 ${cor.bg} ${cor.bd}`}>
-                                <div className="flex items-start gap-3 mb-3">
-                                  <span className={`shrink-0 w-1.5 h-9 rounded-full mt-0.5 ${cor.solid}`} />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-[15px] font-semibold">
-                                      <Editavel valor={c.nome} onChange={(v) => atualizarCusto(c.id, "nome", v)} />
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-1.5">
-                                      <select
-                                        value={c.diaId || ""}
-                                        onChange={(e) => atualizarCusto(c.id, "diaId", e.target.value || null)}
-                                        aria-label="Dia da viagem"
-                                        className="text-[11px] font-semibold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
-                                      >
-                                        <option value="">Sem dia</option>
-                                        {estado.roteiro.map((x) => (
-                                          <option key={x.id} value={x.id}>Dia {x.n} · {x.data}</option>
-                                        ))}
-                                      </select>
-                                      <select
-                                        value={c.moeda}
-                                        onChange={(e) => atualizarCusto(c.id, "moeda", e.target.value)}
-                                        aria-label="Moeda"
-                                        className="text-[11px] font-bold py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
-                                      >
-                                        {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
-                                      </select>
-                                      <span className="text-sm font-semibold tabular-nums">
-                                        <Editavel valor={c.valor} numero onChange={(v) => atualizarCusto(c.id, "valor", v)} />
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="text-right shrink-0">
-                                    <div className="text-base font-bold text-pink-300 tabular-nums">US$ {fmtUSD(usd)}</div>
-                                    <button
-                                      onClick={() => removerCusto(c.id)}
-                                      aria-label="Excluir ficha"
-                                      className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
-                                </div>
-                                <Pagamento
-                                  l={c}
-                                  aliquota={estado.iof}
-                                  compacto
-                                  onChange={(campo, v) => atualizarCusto(c.id, campo, v)}
-                                />
-                                <div className="mt-2.5 pt-2.5 border-t border-[#fbebd9]/10">
-                                  <Localizador
-                                    codigo={c.localizador}
-                                    link={c.link}
-                                    onChange={(campo, v) => atualizarCusto(c.id, campo, v)}
-                                  />
-                                </div>
-                              </li>
-                            );
-                          })}
+                          {fichas.map((c) => (
+                            <li key={c.id}>
+                              <FichaCusto
+                                c={c}
+                                dias={estado.roteiro}
+                                iof={estado.iof}
+                                cambio={estado.cambio}
+                                atualizar={atualizarCusto}
+                                remover={removerCusto}
+                              />
+                            </li>
+                          ))}
                         </ul>
                       )}
                     </section>
