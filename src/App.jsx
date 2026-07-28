@@ -1289,7 +1289,7 @@ export default function App() {
       const d = (estado.roteiro || []).find((x) => x.id === c.diaId);
       out.push({
         chave: `custo-${c.id}`,
-        rotulo: `${d ? `Dia ${d.n}` : "Sem dia"} · ${c.nome}`,
+        rotulo: d ? `Dia ${d.n} · ${c.nome}` : c.nome,
         l: c, origem: "custo", ref: c,
       });
     });
@@ -1391,7 +1391,12 @@ export default function App() {
         if (!p.mes) { semMes += usd; return; }
         if (!porMes[p.mes]) porMes[p.mes] = { mes: p.mes, total: 0, itens: [], vencida: parcelaVencida(p.mes, estado.diaVencimento) };
         porMes[p.mes].total += usd;
-        porMes[p.mes].itens.push({ rotulo, usd, parcela: p.n > 1 ? `${p.i}/${p.n}` : null });
+        porMes[p.mes].itens.push({
+          rotulo, usd,
+          parcela: p.n > 1 ? `${p.i}/${p.n}` : null,
+          moeda: l.moeda,
+          local: p.valor * fator, /* já com o IOF proporcional */
+        });
       });
     });
     return { lista: Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes)), semMes };
@@ -2100,7 +2105,15 @@ export default function App() {
                               <span className="ml-2 text-[10px] font-bold text-orange-300/80">{it.parcela}</span>
                             )}
                           </span>
-                          <span className="shrink-0 tabular-nums text-[#fbebd9]/70">{fvd(it.usd)}</span>
+                          <span className="shrink-0 flex items-baseline gap-2 tabular-nums">
+                            <span
+                              className="text-[11px] text-[#fbebd9]/50"
+                              title={`Lançado em ${MOEDAS[it.moeda]?.nome || it.moeda}`}
+                            >
+                              {MOEDAS[it.moeda]?.rot || it.moeda} {fmtUSD(it.local)}
+                            </span>
+                            <span className="text-[#fbebd9]/80">{fvd(it.usd)}</span>
+                          </span>
                         </li>
                       ))}
                     </ul>
