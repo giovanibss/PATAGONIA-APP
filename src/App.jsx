@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useId } from "react";
 import {
   Wallet, ListChecks, CalendarDays, MapPin, Clock,
   Check, Plus, Trash2, ChevronLeft, ChevronRight, AlertTriangle,
-  BedDouble, Pencil, RotateCcw, Ship, Utensils, Car, Footprints,
+  BedDouble, Pencil, Ship, Utensils, Car, Footprints,
   Cloud, CloudOff, RefreshCw, ChevronDown, Banknote, CalendarClock, Ticket, ExternalLink,
 } from "lucide-react";
 import { configurado, carregarNuvem, salvarNuvem, ouvirNuvem, ID_VIAGEM } from "./supabase";
@@ -60,6 +60,15 @@ function somaMes(mes, n) {
   const [a, m] = mes.split("-").map(Number);
   const d = new Date(a, m - 1 + n, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/* A fatura do mês M vence no dia `diaVenc` de M. Passado esse dia, aquela
+   parcela já saiu da conta e conta como quitada. */
+function parcelaVencida(mes, diaVenc, hoje = new Date()) {
+  if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return false;
+  const [a, m] = mes.split("-").map(Number);
+  const dia = Math.min(Math.max(Number(diaVenc) || 5, 1), 28);
+  return hoje > new Date(a, m - 1, dia, 23, 59, 59);
 }
 
 /* Distribui o valor de um lançamento nas parcelas, resolvendo o arredondamento
@@ -236,6 +245,7 @@ const ESTADO_INICIAL = {
   hospedagens: HOSPEDAGENS_INICIAIS,
   cambio: CAMBIO_PADRAO,
   iof: IOF_PADRAO,
+  diaVencimento: 5, /* dia em que a fatura do cartão vence */
   custos: null, // preenchido na migração
 };
 
@@ -328,6 +338,7 @@ function migrar(bruto) {
 
   e.cambio = { ...CAMBIO_PADRAO, ...(e.cambio || {}) };
   if (typeof e.iof !== "number") e.iof = IOF_PADRAO;
+  if (typeof e.diaVencimento !== "number") e.diaVencimento = 5;
   return e;
 }
 const CHAVE = "patagonia-dez-2026";
@@ -985,6 +996,41 @@ function FichaCusto({ c, dias, iof, cambio, atualizar, remover, comDia = true })
   );
 }
 
+/* ─────────────────────────  CARTÃO RETRÁTIL  ───────────────────────── */
+
+function CardRetratil({ titulo, resumo, aberto, onAlternar, onExcluir, vidro, children }) {
+  return (
+    <div className={`${vidro} rounded-2xl p-5`}>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onAlternar}
+          aria-expanded={aberto}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-lg focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+        >
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-[#fbebd9]/55 transition-transform duration-300 ${aberto ? "rotate-180" : ""}`}
+          />
+          <h3 className="font-titulo text-lg font-medium tracking-wide truncate">{titulo}</h3>
+        </button>
+        {resumo != null && (
+          <span className="shrink-0 text-sm font-bold text-pink-300 tabular-nums">{resumo}</span>
+        )}
+        {onExcluir && (
+          <button
+            onClick={onExcluir}
+            aria-label={`Excluir ${titulo}`}
+            className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+          >
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+      {aberto && <div className="mt-4">{children}</div>}
+    </div>
+  );
+}
+
 /* ─────────────────────────  APP  ───────────────────────── */
 
 export default function App() {
@@ -1009,6 +1055,8 @@ export default function App() {
   const [abrirCambio, setAbrirCambio] = useState(false);
   const [buscandoCambio, setBuscandoCambio] = useState(false);
   const [baseAberta, setBaseAberta] = useState({});
+  const [cardAberto, setCardAberto] = useState({});
+  const alternarCard = (k) => setCardAberto((m) => ({ ...m, [k]: !m[k] }));
 
   /* No desktop, a barra horizontal cede lugar à coluna lateral ao rolar */
   const [telaLarga, setTelaLarga] = useState(
@@ -1302,17 +1350,31 @@ export default function App() {
 
   const fin = useMemo(() => {
     const z = { pago: 0, faturar: 0, chegada: 0, aberto: 0, iof: 0, total: 0 };
+    const dv = estado.diaVencimento;
     lancamentos.forEach(({ l }) => {
-      const usd = lancEmUSD(l, estado.cambio, estado.iof);
       const taxa = Number(estado.cambio?.[l.moeda]) || 0;
-      const st = STATUS[l.status] ? l.status : "aberto";
-      z[st] += usd;
       z.iof += iofDe(l, estado.iof) * taxa;
-      z.total += usd;
+      const st = STATUS[l.status] ? l.status : "aberto";
+
+      if (st === "faturar") {
+        /* cada parcela é avaliada pelo seu vencimento */
+        const bruto = Number(l.valor) || 0;
+        const fator = bruto > 0 ? (bruto + iofDe(l, estado.iof)) / bruto : 1;
+        parcelasDe(l).forEach((p) => {
+          const usd = p.valor * fator * taxa;
+          if (parcelaVencida(p.mes, dv)) z.pago += usd;
+          else z.faturar += usd;
+          z.total += usd;
+        });
+      } else {
+        const usd = lancEmUSD(l, estado.cambio, estado.iof);
+        z[st] += usd;
+        z.total += usd;
+      }
     });
     z.pendente = z.faturar + z.chegada + z.aberto;
     return z;
-  }, [lancamentos, estado.cambio, estado.iof]);
+  }, [lancamentos, estado.cambio, estado.iof, estado.diaVencimento]);
 
   /* Cronograma das faturas: agrupa por mês o que ainda vai vencer no cartão,
      já quebrado em parcelas. */
@@ -1327,13 +1389,19 @@ export default function App() {
       parcelasDe(l).forEach((p) => {
         const usd = p.valor * fator * taxa;
         if (!p.mes) { semMes += usd; return; }
-        if (!porMes[p.mes]) porMes[p.mes] = { mes: p.mes, total: 0, itens: [] };
+        if (!porMes[p.mes]) porMes[p.mes] = { mes: p.mes, total: 0, itens: [], vencida: parcelaVencida(p.mes, estado.diaVencimento) };
         porMes[p.mes].total += usd;
         porMes[p.mes].itens.push({ rotulo, usd, parcela: p.n > 1 ? `${p.i}/${p.n}` : null });
       });
     });
     return { lista: Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes)), semMes };
-  }, [lancamentos, estado.cambio, estado.iof]);
+  }, [lancamentos, estado.cambio, estado.iof, estado.diaVencimento]);
+
+  const totalPorDiaGeral = useMemo(
+    () => (estado.custos || []).filter((c) => !c.fixo)
+      .reduce((t, c) => t + lancEmUSD(c, estado.cambio, estado.iof), 0),
+    [estado.custos, estado.cambio, estado.iof]
+  );
 
   const totalRoteiro = useMemo(
     () => (estado.custos || []).reduce((s, c) => s + lancEmUSD(c, estado.cambio, estado.iof), 0),
@@ -1429,6 +1497,16 @@ export default function App() {
   const removerCusto = (id) =>
     setEstado((s) => ({ ...s, custos: s.custos.filter((c) => c.id !== id) }));
 
+  const adicionarGeral = () => {
+    const id = `c-ger-${Date.now()}`;
+    setEstado((s) => ({ ...s, custos: [...(s.custos || []), {
+      id, nome: "Novo gasto geral", fixo: `geral-${id}`, diaId: null,
+      valor: 0, moeda: "USD", status: "aberto", pagamento: "credito",
+      iofIsento: false, parcelas: 1, mesFatura: null, localizador: "", link: "",
+    }] }));
+    setCardAberto((m) => ({ ...m, [id]: true }));
+  };
+
   const adicionarCusto = (diaId = null) =>
     setEstado((s) => ({ ...s, custos: [...(s.custos || []), {
       id: `c-${Date.now()}`, nome: "Novo custo", diaId: diaId || s.roteiro[0]?.id || null,
@@ -1448,9 +1526,6 @@ export default function App() {
       : { ...b, slots: b.slots.map((sl) => sl.id !== slotId ? sl
           : { ...sl, lanc: { ...(sl.lanc || {}), [campo]: valor } }) }) }));
 
-  const restaurar = () => {
-    if (window.confirm("Restaurar tudo ao estado original? Roteiro, custos, hospedagens e checklist serão zerados.")) setEstado(migrar(ESTADO_INICIAL));
-  };
 
   const vidro = "backdrop-blur-2xl bg-[#150f1e]/70 border border-[#fbebd9]/12 shadow-[0_8px_40px_rgba(0,0,0,0.55)]";
 
@@ -1891,10 +1966,22 @@ export default function App() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-[#fbebd9]/10 flex items-center justify-between gap-3">
-                <div className="text-xs text-[#fbebd9]/55">
-                  Alíquota do IOF{" "}
-                  <span className="font-bold text-[#fbebd9]/80">
-                    <Editavel valor={estado.iof} numero onChange={(v) => setEstado((s) => ({ ...s, iof: v }))} />%
+                <div className="text-xs text-[#fbebd9]/55 flex flex-wrap gap-x-4 gap-y-1">
+                  <span>
+                    Alíquota do IOF{" "}
+                    <span className="font-bold text-[#fbebd9]/80">
+                      <Editavel valor={estado.iof} numero onChange={(v) => setEstado((s) => ({ ...s, iof: v }))} />%
+                    </span>
+                  </span>
+                  <span title="Passado esse dia, a parcela daquele mês passa a contar como quitada">
+                    Fatura vence dia{" "}
+                    <span className="font-bold text-[#fbebd9]/80">
+                      <Editavel
+                        valor={estado.diaVencimento}
+                        numero
+                        onChange={(v) => setEstado((s) => ({ ...s, diaVencimento: Math.min(Math.max(Math.round(v) || 5, 1), 28) }))}
+                      />
+                    </span>
                   </span>
                 </div>
                 <div className="text-xs text-[#fbebd9]/50 text-right">
@@ -1998,8 +2085,9 @@ export default function App() {
                 {faturas.lista.map((f) => (
                   <li key={f.mes} className="rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.04] overflow-hidden">
                     <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-[#fbebd9]/10">
-                      <span className="text-sm font-bold uppercase tracking-wider text-orange-300">
+                      <span className={`text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 ${f.vencida ? "text-emerald-300" : "text-orange-300"}`}>
                         {rotuloFatura(f.mes)}
+                        {f.vencida && <span className="text-[10px] font-semibold normal-case tracking-normal opacity-80">· já quitada</span>}
                       </span>
                       <span className="text-base font-bold tabular-nums">{fvd(f.total)}</span>
                     </div>
@@ -2044,47 +2132,14 @@ export default function App() {
         {/* LANÇAMENTOS */}
         {aba === "custos" && (
           <div className="space-y-3">
-            {/* Passagens aéreas — ficha própria */}
-            {(estado.custos || []).filter((c) => c.fixo === "passagens").map((c) => (
-              <div key={c.id} className={`${vidro} rounded-2xl p-6`}>
-                <h3 className="font-titulo text-lg font-medium tracking-wide mb-1">Passagens aéreas</h3>
-                <p className="text-sm text-[#fbebd9]/50 mb-4">
-                  Não pertence a um dia do roteiro. Se foi parcelada, defina o mês da
-                  primeira fatura e o número de parcelas — elas entram no cronograma.
-                </p>
-                <FichaCusto
-                  c={c}
-                  dias={estado.roteiro}
-                  iof={estado.iof}
-                  cambio={estado.cambio}
-                  atualizar={atualizarCusto}
-                  comDia={false}
-                />
-              </div>
-            ))}
-
-            {/* Aluguel do carro — ficha própria */}
-            {(estado.custos || []).filter((c) => c.fixo === "carro").map((c) => (
-              <div key={c.id} className={`${vidro} rounded-2xl p-6`}>
-                <h3 className="font-titulo text-lg font-medium tracking-wide mb-1">Aluguel do carro</h3>
-                <p className="text-sm text-[#fbebd9]/50 mb-4">
-                  Diárias, seguro e a autorização para cruzar a fronteira. Lembre que a
-                  locadora costuma cobrar em dólar e o cartão soma IOF.
-                </p>
-                <FichaCusto
-                  c={c}
-                  dias={estado.roteiro}
-                  iof={estado.iof}
-                  cambio={estado.cambio}
-                  atualizar={atualizarCusto}
-                  comDia={false}
-                />
-              </div>
-            ))}
-
-            {/* Fichas de custo */}
-            <div className={`${vidro} rounded-2xl p-6`}>
-              <h3 className="font-titulo text-lg font-medium tracking-wide mb-1">Fichas de custo</h3>
+            {/* Lançamentos por dia */}
+            <CardRetratil
+              vidro={vidro}
+              titulo="Lançamentos por dia"
+              resumo={`US$ ${fmtUSD(totalPorDiaGeral)}`}
+              aberto={cardAberto.dias === true}
+              onAlternar={() => alternarCard("dias")}
+            >
               <p className="text-sm text-[#fbebd9]/50 mb-5">
                 Cada gasto é uma ficha atrelada a um dia. Os totais por dia aparecem no Roteiro.
               </p>
@@ -2146,7 +2201,38 @@ export default function App() {
                   );
                 })}
               </div>
-            </div>
+            </CardRetratil>
+
+            {/* Gastos gerais — passagens, carro e o que mais você criar */}
+            {(estado.custos || []).filter((c) => c.fixo).map((c) => (
+              <CardRetratil
+                key={c.id}
+                vidro={vidro}
+                titulo={c.nome || "Gasto geral"}
+                resumo={`US$ ${fmtUSD(lancEmUSD(c, estado.cambio, estado.iof))}`}
+                aberto={cardAberto[c.id] === true}
+                onAlternar={() => alternarCard(c.id)}
+                onExcluir={() => {
+                  if (window.confirm(`Excluir "${c.nome}"? Isso não pode ser desfeito.`)) removerCusto(c.id);
+                }}
+              >
+                <FichaCusto
+                  c={c}
+                  dias={estado.roteiro}
+                  iof={estado.iof}
+                  cambio={estado.cambio}
+                  atualizar={atualizarCusto}
+                  comDia={false}
+                />
+              </CardRetratil>
+            ))}
+
+            <button
+              onClick={adicionarGeral}
+              className={`${vidro} w-full rounded-2xl p-4 flex items-center justify-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 hover:bg-[#fbebd9]/[0.09] transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70`}
+            >
+              <Plus size={16} /> Novo ficheiro de gasto geral
+            </button>
 
             {/* Hospedagens no consolidado */}
             <div className={`${vidro} rounded-2xl p-6`}>
@@ -2182,9 +2268,6 @@ export default function App() {
               <p className="mt-4 text-xs text-[#fbebd9]/55 leading-relaxed">
                 Não inclui passagens aéreas. A hospedagem soma apenas as reservas ativas.
               </p>
-              <button onClick={restaurar} className="mt-4 flex items-center gap-2 text-xs text-[#fbebd9]/55 hover:text-[#fbebd9]/80 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 rounded px-1">
-                <RotateCcw size={12} /> Restaurar tudo ao original
-              </button>
             </div>
           </div>
         )}
