@@ -2106,4 +2106,464 @@ export default function App() {
             {/* 4 · Câmbio */}
             <CardRetratil
               vidro={vidro}
-              titulo
+              titulo="Câmbio"
+              resumo={`R$ ${fmt(1 / (estado.cambio.BRL || 1), 2)}/US$`}
+              aberto={cardFin.cambio === true}
+              onAlternar={() => alternarFin("cambio")}
+            >
+
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <p className="text-xs text-[#fbebd9]/55 leading-relaxed">
+                    Quanto vale 1 unidade da moeda em dólar. Atualiza sozinho uma vez por dia; dá para ajustar à mão se estiver sem internet.
+                  </p>
+                  <button
+                    onClick={() => buscarCambio(true)}
+                    disabled={buscandoCambio}
+                    className="shrink-0 flex items-center gap-1.5 text-xs font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-2.5 py-1.5 rounded-lg hover:bg-[#fbebd9]/10 disabled:opacity-40 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                  >
+                    <RefreshCw size={13} className={buscandoCambio ? "animate-spin" : ""} />
+                    Atualizar agora
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Object.entries(MOEDAS).map(([cod, m]) => (
+                    <div key={cod} className="rounded-xl bg-[#fbebd9]/[0.05] border border-[#fbebd9]/10 p-3">
+                      <div className="text-[10px] uppercase tracking-widest text-fuchsia-300/70 mb-1">{cod} · {m.nome}</div>
+                      {cod === "USD" ? (
+                        <div className="text-sm font-semibold text-[#fbebd9]/50">1,00 (base)</div>
+                      ) : (
+                        <>
+                          <div className="text-sm font-semibold tabular-nums">
+                            <Editavel valor={estado.cambio[cod]} numero onChange={(v) => atualizarCambio(cod, v)} />
+                          </div>
+                          <div className="text-[10px] text-[#fbebd9]/50 mt-0.5 tabular-nums">
+                            {fmt(1 / (estado.cambio[cod] || 1), 2)} por US$ 1
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex items-baseline justify-between gap-3 text-[11px] text-[#fbebd9]/55">
+                  <span>
+                    {estado.cambioAtualizadoEm
+                      ? `Atualizado em ${new Date(estado.cambioAtualizadoEm).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                      : "Ainda não atualizado automaticamente"}
+                  </span>
+                  <a
+                    href="https://www.exchangerate-api.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:text-[#fbebd9]/60 transition-colors shrink-0"
+                  >
+                    Rates by Exchange Rate API
+                  </a>
+                </div>
+            </CardRetratil>
+          </div>
+        )}
+
+        {/* LANÇAMENTOS */}
+        {aba === "custos" && (
+          <div className="space-y-3">
+            {/* Lançamentos por dia */}
+            <CardRetratil
+              vidro={vidro}
+              titulo="Lançamentos por dia"
+              resumo={`US$ ${fmtUSD(totalPorDiaGeral)}`}
+              aberto={cardAberto.dias === true}
+              onAlternar={() => alternarCard("dias")}
+            >
+              <p className="text-sm text-[#fbebd9]/50 mb-5">
+                Cada gasto é uma ficha atrelada a um dia. Os totais por dia aparecem no Roteiro.
+              </p>
+
+              <div className="space-y-5">
+                {[...estado.roteiro, null].map((d) => {
+                  const fichas = (estado.custos || []).filter((c) =>
+                    !c.fixo && (d ? c.diaId === d.id : !c.diaId || !estado.roteiro.some((x) => x.id === c.diaId))
+                  );
+                  if (!d && fichas.length === 0) return null;
+                  const subtotal = fichas.reduce((s, c) => s + lancEmUSD(c, estado.cambio, estado.iof), 0);
+                  return (
+                    <section key={d ? d.id : "sem-dia"}>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-baseline gap-2 min-w-0">
+                          <span className="font-titulo text-base font-medium tracking-wide shrink-0">
+                            {d ? `Dia ${d.n}` : "Sem dia"}
+                          </span>
+                          {d && <span className="text-[11px] text-[#fbebd9]/50 shrink-0">{d.data}</span>}
+                          {d && <span className="text-[11px] text-[#fbebd9]/50 truncate hidden sm:inline">· {d.titulo}</span>}
+                        </div>
+                        <div className="flex-1 border-t border-[#fbebd9]/10" />
+                        {subtotal > 0 && (
+                          <span className="text-xs font-bold text-pink-300 tabular-nums shrink-0">
+                            US$ {fmtUSD(subtotal)}
+                          </span>
+                        )}
+                        {d && (
+                          <button
+                            onClick={() => adicionarCusto(d.id)}
+                            aria-label={`Nova ficha no dia ${d.n}`}
+                            title="Nova ficha neste dia"
+                            className="shrink-0 p-1.5 rounded-lg text-fuchsia-300/70 hover:text-fuchsia-200 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                          >
+                            <Plus size={15} />
+                          </button>
+                        )}
+                      </div>
+
+                      {fichas.length === 0 ? (
+                        <p className="text-xs text-[#fbebd9]/45 italic pl-1">Sem lançamentos.</p>
+                      ) : (
+                        <ul className="space-y-2.5">
+                          {fichas.map((c) => (
+                            <li key={c.id}>
+                              <FichaCusto
+                                c={c}
+                                dias={estado.roteiro}
+                                iof={estado.iof}
+                                cambio={estado.cambio}
+                                atualizar={atualizarCusto}
+                                remover={removerCusto}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+            </CardRetratil>
+
+            {/* Gastos gerais — passagens, carro e o que mais você criar */}
+            {(estado.custos || []).filter((c) => c.fixo).map((c) => (
+              <CardRetratil
+                key={c.id}
+                vidro={vidro}
+                titulo={c.nome || "Gasto geral"}
+                resumo={`US$ ${fmtUSD(lancEmUSD(c, estado.cambio, estado.iof))}`}
+                aberto={cardAberto[c.id] === true}
+                onAlternar={() => alternarCard(c.id)}
+                onExcluir={() => {
+                  if (window.confirm(`Excluir "${c.nome}"? Isso não pode ser desfeito.`)) removerCusto(c.id);
+                }}
+              >
+                <FichaCusto
+                  c={c}
+                  dias={estado.roteiro}
+                  iof={estado.iof}
+                  cambio={estado.cambio}
+                  atualizar={atualizarCusto}
+                  comDia={false}
+                />
+              </CardRetratil>
+            ))}
+
+            <button
+              onClick={adicionarGeral}
+              className={`${vidro} w-full rounded-2xl p-4 flex items-center justify-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 hover:bg-[#fbebd9]/[0.09] transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70`}
+            >
+              <Plus size={16} /> Novo ficheiro de gasto geral
+            </button>
+
+          </div>
+        )}
+
+        {/* CHECKLIST */}
+        {aba === "checklist" && (
+          <div className={`${vidro} rounded-2xl p-6`}>
+            <div className="flex items-baseline justify-between gap-3 mb-1">
+              <h2 className="font-titulo text-2xl font-medium tracking-wide">Antes de viajar</h2>
+              <span className="text-sm text-[#fbebd9]/55 tabular-nums shrink-0">{feitos}/{estado.alertas.length}</span>
+            </div>
+            <p className="text-sm text-[#fbebd9]/50 mb-6">
+              Clique no texto para editar. O sino marca as pendências críticas.
+            </p>
+
+            {estado.alertas.length === 0 && (
+              <p className="text-sm text-[#fbebd9]/50 italic py-6 text-center">
+                Nenhuma pendência. Use o botão abaixo para adicionar.
+              </p>
+            )}
+
+            <ul className="space-y-2">
+              {estado.alertas.map((a) => (
+                <li
+                  key={a.id}
+                  className={`group flex items-start gap-3 p-4 rounded-xl border transition-all duration-300 ${
+                    a.feito
+                      ? "bg-emerald-500/10 border-emerald-400/30"
+                      : a.critico
+                      ? "bg-orange-500/10 border-orange-400/30"
+                      : "bg-[#fbebd9]/[0.05] border-[#fbebd9]/15 hover:bg-[#fbebd9]/[0.09]"
+                  }`}
+                >
+                  <button
+                    onClick={() => alternarAlerta(a.id)}
+                    aria-pressed={a.feito}
+                    aria-label={a.feito ? "Desmarcar" : "Marcar como concluída"}
+                    className={`shrink-0 w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                      a.feito ? "bg-emerald-400 border-emerald-400" : "border-[#fbebd9]/35 hover:border-[#fbebd9]/70"
+                    }`}
+                  >
+                    {a.feito && <Check size={13} className="text-[#0d0b14]" strokeWidth={3.5} />}
+                  </button>
+
+                  <div className={`flex-1 text-[15px] leading-relaxed ${a.feito ? "line-through text-[#fbebd9]/55" : "text-[#fbebd9]/85"}`}>
+                    <Editavel valor={a.texto} multiline onChange={(v) => atualizarAlerta(a.id, "texto", v)} />
+                  </div>
+
+                  <button
+                    onClick={() => atualizarAlerta(a.id, "critico", !a.critico)}
+                    aria-pressed={a.critico}
+                    aria-label={a.critico ? "Remover marcação de crítica" : "Marcar como crítica"}
+                    title={a.critico ? "Crítica" : "Marcar como crítica"}
+                    className={`shrink-0 p-1.5 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-orange-300/70 ${
+                      a.critico
+                        ? "text-orange-300 hover:bg-orange-500/15"
+                        : "text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-orange-300 hover:bg-orange-500/15"
+                    }`}
+                  >
+                    <AlertTriangle size={15} />
+                  </button>
+
+                  <button
+                    onClick={() => removerAlerta(a.id)}
+                    aria-label="Excluir pendência"
+                    className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <button
+              onClick={adicionarAlerta}
+              className="mt-4 flex items-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-3 py-2 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+            >
+              <Plus size={15} /> Adicionar pendência
+            </button>
+          </div>
+        )}
+
+        {/* HOSPEDAGEM */}
+        {aba === "hotel" && (
+          <div className="space-y-3">
+            <div className={`${vidro} rounded-2xl p-5`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-titulo text-2xl font-medium tracking-wide mb-1">Hospedagem</h2>
+                  <p className="text-sm text-[#fbebd9]/50">
+                    Cada hotel é uma reserva própria, com suas noites e seu pagamento. Ative os que estão confirmados.
+                  </p>
+                </div>
+                <button
+                  onClick={adicionarBase}
+                  className="shrink-0 flex items-center gap-1.5 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-2.5 py-1.5 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                >
+                  <Plus size={14} /> Localidade
+                </button>
+              </div>
+            </div>
+
+            {estado.hospedagens.map((b) => {
+              const ativos = (b.slots || []).filter((s) => s.ativo);
+              const totalBase = ativos.reduce((t, sl) =>
+                t + lancEmUSD({ ...(sl.lanc || {}), moeda: sl.moeda, valor: totalLocal(sl) }, estado.cambio, estado.iof), 0);
+              const aberta = baseAberta[b.id] === true; /* começa retraída */
+              return (
+                <div key={b.id} className={`${vidro} rounded-2xl p-5`}>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setBaseAberta((m) => ({ ...m, [b.id]: !aberta }))}
+                      aria-expanded={aberta}
+                      aria-label={aberta ? "Recolher" : "Expandir"}
+                      className="shrink-0 p-1 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                    >
+                      <ChevronDown size={18} className={`text-[#fbebd9]/50 transition-transform duration-300 ${aberta ? "rotate-180" : ""}`} />
+                    </button>
+                    <h3 className="font-titulo text-xl font-medium tracking-wide flex-1 min-w-0">
+                      <Editavel valor={b.nome} onChange={(v) => atualizarBase(b.id, "nome", v)} />
+                    </h3>
+                    <div className="text-right shrink-0">
+                      {totalBase > 0 && (
+                        <div className="text-sm font-bold text-pink-300 tabular-nums">US$ {fmtUSD(totalBase)}</div>
+                      )}
+                      <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/50">
+                        {ativos.length ? `${ativos.length} ${ativos.length === 1 ? "reserva" : "reservas"}` : "sem reserva"}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { if (window.confirm(`Excluir a localidade "${b.nome}" e todos os seus hotéis?`)) removerBase(b.id); }}
+                      aria-label="Excluir localidade"
+                      className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+
+                  {aberta && (
+                    <div className="mt-4 space-y-3">
+                      {(b.slots || []).map((sl) => {
+                        const on = sl.ativo;
+                        const local = totalLocal(sl);
+                        const usd = lancEmUSD({ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }, estado.cambio, estado.iof);
+                        return (
+                          <div
+                            key={sl.id}
+                            className={`group rounded-xl border p-4 transition-all duration-300 ${
+                              on ? "bg-emerald-500/10 border-emerald-400/40" : "bg-[#fbebd9]/[0.05] border-[#fbebd9]/10"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3 mb-3">
+                              <button
+                                onClick={() => escolherSlot(b.id, sl.id)}
+                                aria-pressed={on}
+                                aria-label={on ? "Desativar reserva" : "Ativar reserva"}
+                                title={on ? "Reserva ativa — soma no total" : "Ative para somar no total"}
+                                className={`shrink-0 w-5 h-5 mt-1 rounded-md border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                                  on ? "bg-emerald-400 border-emerald-400" : "border-[#fbebd9]/35 hover:border-[#fbebd9]/70"
+                                }`}
+                              >
+                                {on && <Check size={13} className="text-[#0d0b14]" strokeWidth={3.5} />}
+                              </button>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[15px] font-semibold">
+                                  <Editavel
+                                    valor={sl.hotel || "Nome do hotel"}
+                                    onChange={(v) => atualizarSlot(b.id, sl.id, "hotel", v)}
+                                    className={sl.hotel ? "" : "text-[#fbebd9]/50 italic"}
+                                  />
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                  {["diaria", "fechado"].map((m) => (
+                                    <button
+                                      key={m}
+                                      onClick={() => atualizarSlot(b.id, sl.id, "modo", m)}
+                                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                                        sl.modo === m ? "bg-[#fbebd9] text-[#0d0b14]" : "bg-[#fbebd9]/10 text-[#fbebd9]/50 hover:bg-[#fbebd9]/20"
+                                      }`}
+                                    >
+                                      {m === "diaria" ? "Diária" : "Fechado"}
+                                    </button>
+                                  ))}
+                                  <select
+                                    value={sl.moeda}
+                                    onChange={(e) => atualizarSlot(b.id, sl.id, "moeda", e.target.value)}
+                                    aria-label="Moeda"
+                                    className="text-[10px] font-bold uppercase py-1 px-1.5 rounded-md bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 [&>option]:bg-zinc-800"
+                                  >
+                                    {Object.keys(MOEDAS).map((m) => <option key={m} value={m}>{m}</option>)}
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <div className="text-base font-bold text-pink-300 tabular-nums">US$ {fmtUSD(usd)}</div>
+                                <div className="text-[10px] text-[#fbebd9]/50 tabular-nums">{MOEDAS[sl.moeda].rot} {fmt(local)}</div>
+                                <button
+                                  onClick={() => removerSlot(b.id, sl.id)}
+                                  aria-label="Excluir hotel"
+                                  className="mt-1 p-1.5 rounded-lg text-[#fbebd9]/45 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-300 hover:bg-rose-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                              <div className="space-y-1.5 text-sm">
+                                {sl.modo === "diaria" ? (
+                                  [["Diária", "diaria"], ["Noites", "noites"], ["Taxas", "taxas"]].map(([rot, campo]) => (
+                                    <div key={campo} className="flex items-center justify-between gap-2">
+                                      <span className="text-[#fbebd9]/55 text-xs">{rot}</span>
+                                      <span className="tabular-nums font-semibold text-right">
+                                        <Editavel valor={sl[campo]} numero onChange={(v) => atualizarSlot(b.id, sl.id, campo, v)} />
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[#fbebd9]/55 text-xs">Valor total</span>
+                                    <span className="tabular-nums font-semibold text-right">
+                                      <Editavel valor={sl.fechado} numero onChange={(v) => atualizarSlot(b.id, sl.id, "fechado", v)} />
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] uppercase tracking-widest text-[#fbebd9]/55 mb-1.5">
+                                  Noites desta reserva
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {estado.roteiro.map((d) => {
+                                    const marcado = (sl.diasIds || []).includes(d.id);
+                                    return (
+                                      <button
+                                        key={d.id}
+                                        onClick={() => alternarDiaSlot(b.id, sl.id, d.id)}
+                                        aria-pressed={marcado}
+                                        title={`Dia ${d.n} · ${d.data}`}
+                                        className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${
+                                          marcado ? "bg-fuchsia-400 text-[#0d0b14]" : "bg-[#fbebd9]/[0.07] text-[#fbebd9]/55 hover:bg-[#fbebd9]/15"
+                                        }`}
+                                      >
+                                        {d.n}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            {on && (
+                              <div className="pt-3 border-t border-[#fbebd9]/10 space-y-2.5">
+                                <Pagamento
+                                  l={{ ...(sl.lanc || {}), moeda: sl.moeda, valor: local }}
+                                  aliquota={estado.iof}
+                                  compacto
+                                  onChange={(c, v) => atualizarLancSlot(b.id, sl.id, c, v)}
+                                />
+                                <Localizador
+                                  codigo={sl.localizador}
+                                  link={sl.link}
+                                  onChange={(campo, v) => atualizarSlot(b.id, sl.id, campo, v)}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        onClick={() => adicionarSlot(b.id)}
+                        className="flex items-center gap-2 text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200 px-3 py-2 rounded-lg hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                      >
+                        <Plus size={15} /> Adicionar hotel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <footer className="mt-8 text-center text-[11px] text-[#fbebd9]/50">
+          {configurado
+            ? `Sincronizado na nuvem · ${ID_VIAGEM}`
+            : "Salvo apenas neste navegador — configure a sincronização para usar em outros aparelhos."}
+          <span className="block mt-1 opacity-60">versão {typeof __VERSAO__ !== "undefined" ? __VERSAO__ : "dev"}</span>
+        </footer>
+        </div>
+      </div>
+    </div>
+  );
+}

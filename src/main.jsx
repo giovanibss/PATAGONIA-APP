@@ -4,9 +4,13 @@ import App from './App.jsx'
 import '@fontsource/oswald/latin-500.css'
 import '@fontsource/oswald/latin-700.css'
 import './index.css'
+import { registrarAtualizacoes } from './atualizacao.js'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 )
+
+/* Mantém o app sempre na versão publicada */
+registrarAtualizacoes()
