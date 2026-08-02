@@ -2,11 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const VERSAO = new Date().toISOString().slice(0, 16).replace("T", " ");
+
 export default defineConfig({
+  define: { __VERSAO__: JSON.stringify(VERSAO) },
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       manifest: {
         name: 'Kooka Planner · Patagônia',
         short_name: 'Kooka',
