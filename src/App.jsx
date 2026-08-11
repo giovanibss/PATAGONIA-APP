@@ -3,6 +3,7 @@ import {
   Wallet, ListChecks, CalendarDays, MapPin, Clock,
   Check, Plus, Trash2, ChevronLeft, ChevronRight, AlertTriangle,
   BedDouble, Pencil, Ship, Utensils, Car, Footprints,
+  Instagram, Youtube, Link2,
   Cloud, CloudOff, RefreshCw, ChevronDown, Banknote, CalendarClock, Ticket, ExternalLink,
 } from "lucide-react";
 import { configurado, carregarNuvem, salvarNuvem, ouvirNuvem, ID_VIAGEM } from "./supabase";
@@ -150,6 +151,34 @@ const HOSPEDAGENS_INICIAIS = [
 ];
 
 const ic = { carro: Car, barco: Ship, trilha: Footprints, comida: Utensils, ponto: MapPin };
+
+/* ─────────────────────────  ÍCONE PELO CONTEXTO  ───────────────────────── */
+
+/* Deduz o ícone a partir do texto da atividade. Vence a pista que aparece
+   PRIMEIRO na frase — quase sempre a ação principal: em "Trilha até a laguna,
+   com piquenique" manda "trilha", não "piquenique". */
+const semAcento = (s) =>
+  (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+const PISTAS_TIPO = [
+  ["barco", /(barco|navegac|navegar|navegand|catamar|lancha|ferry|balsa|cruzeiro|nautic|zarpa|embarcac|muelle|pier|kayak|caiaque|\bremo\b)/],
+  ["trilha", /(trilha|trekking|\btrek|caminhad|hike|mirador|mirante|cachoeir|cascad|cascat|laguna|lagoa|glaciar|geleira|iceberg|praia|passarel|sendero|subida|\bcerro\b|cume|montanh|bosque|floresta|caverna|gruta|cueva|\ba pe\b|bicicleta|pedalar)/],
+  ["comida", /(cafe|almoc|jantar|\bjanta\b|restaurant|lanche|lanchar|sorvete|gelato|cervej|cervec|chocolate|vinho|degustac|padaria|confeitar|brunch|piquenique|petisc|\bcomer\b|comida|refeic|churrasc|cordeiro|pizza|\bbar\b|\bdoces?\b|mercado|supermercad)/],
+  ["carro", /(carro|dirigir|dirigind|estrada|rodovia|\bruta\b|\brota\b|\bkm\b|deslocament|traslado|transfer|aeroporto|\bvoo\b|\bvoos\b|embarque|fronteira|alfandega|imigrac|onibus|\btaxi\b|\bvan\b|combustivel|\bposto\b|pedagio|rumo a|partida|retorno|regresso|devoluc|\bsaida\b)/],
+  ["ponto", /(museu|\bcentro\b|\bpraca\b|igreja|catedral|artesanat|estancia|fazenda|\bloja\b|hotel|parque|visita|city ?tour|\bshow\b|festa|descanso|check-?in|check-?out)/],
+];
+
+function tipoPorTexto(texto, padrao = "ponto") {
+  const t = semAcento(texto);
+  if (!t.trim()) return padrao;
+  let escolhido = null;
+  let melhor = Infinity;
+  for (const [tipo, re] of PISTAS_TIPO) {
+    const i = t.search(re);
+    if (i >= 0 && i < melhor) { melhor = i; escolhido = tipo; }
+  }
+  return escolhido || padrao;
+}
 
 const ABAS = [
   { id: "roteiro", rot: "Roteiro", Icone: IconeRoteiro },
@@ -996,6 +1025,123 @@ function FichaCusto({ c, dias, iof, cambio, atualizar, remover, comDia = true })
   );
 }
 
+/* ─────────────────────────  LINK DA ATIVIDADE  ───────────────────────── */
+
+/* Instagram e YouTube ganham ícone próprio; qualquer outro endereço vira um
+   ícone genérico. Só reconhece o que abre com http(s). */
+function servicoLink(u) {
+  const t = (u || "").trim();
+  if (!/^https?:\/\//i.test(t)) return null;
+  try {
+    const h = new URL(t).hostname.replace(/^www\./i, "").toLowerCase();
+    if (/(^|\.)(instagram\.com|instagr\.am)$/.test(h)) return "instagram";
+    if (/(^|\.)(youtube\.com|youtube-nocookie\.com|youtu\.be)$/.test(h)) return "youtube";
+    return "outro";
+  } catch (e) {
+    return null;
+  }
+}
+
+const ESTILO_LINK = {
+  instagram: {
+    Icone: Instagram,
+    cor: "text-pink-300 bg-pink-500/15 border-pink-400/45 hover:bg-pink-500/25",
+    rot: "Abrir no Instagram",
+  },
+  youtube: {
+    Icone: Youtube,
+    cor: "text-red-300 bg-red-500/15 border-red-400/45 hover:bg-red-500/25",
+    rot: "Abrir no YouTube",
+  },
+  outro: {
+    Icone: ExternalLink,
+    cor: "text-fuchsia-300 bg-fuchsia-500/15 border-fuchsia-400/45 hover:bg-fuchsia-500/25",
+    rot: "Abrir link",
+  },
+};
+
+function LinkMidia({ valor, onChange }) {
+  const [editando, setEditando] = useState(false);
+  const [rascunho, setRascunho] = useState(valor || "");
+  const ref = useRef(null);
+
+  useEffect(() => { setRascunho(valor || ""); }, [valor]);
+  useEffect(() => {
+    if (editando && ref.current) { ref.current.focus(); ref.current.select(); }
+  }, [editando]);
+
+  const url = (valor || "").trim();
+  const servico = servicoLink(url);
+  const est = servico ? ESTILO_LINK[servico] : null;
+
+  const salvar = () => {
+    setEditando(false);
+    const t = rascunho.trim();
+    /* aceita "instagram.com/..." colado sem o https:// */
+    onChange(t && !/^https?:\/\//i.test(t) ? `https://${t}` : t);
+  };
+
+  return (
+    <>
+      {est && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          title={est.rot}
+          aria-label={est.rot}
+          className={`shrink-0 p-1.5 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70 ${est.cor}`}
+        >
+          <est.Icone size={14} />
+        </a>
+      )}
+
+      <button
+        onClick={() => setEditando((v) => !v)}
+        title={url ? "Editar o link" : "Adicionar link do Instagram ou YouTube"}
+        aria-label={url ? "Editar o link" : "Adicionar link"}
+        aria-expanded={editando}
+        className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/40 opacity-60 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 hover:text-fuchsia-300 hover:bg-fuchsia-500/15 transition-all focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+      >
+        <Link2 size={14} />
+      </button>
+
+      {editando && (
+        <div className="absolute right-3 top-full mt-1 z-30 w-[min(19rem,calc(100%-1.5rem))] rounded-xl border border-fuchsia-300/30 bg-[#1a1420]/95 backdrop-blur-xl p-3 shadow-[0_12px_40px_rgba(0,0,0,0.55)]">
+          <div className="font-titulo text-[10px] uppercase tracking-[0.18em] text-fuchsia-300/85 mb-2">
+            Link do Instagram ou YouTube
+          </div>
+          <input
+            ref={ref}
+            value={rascunho}
+            inputMode="url"
+            onChange={(e) => setRascunho(e.target.value)}
+            onBlur={salvar}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") salvar();
+              if (e.key === "Escape") { setRascunho(valor || ""); setEditando(false); }
+            }}
+            placeholder="instagram.com/… ou youtu.be/…"
+            className="w-full text-sm bg-[#fbebd9]/10 border border-fuchsia-300/50 rounded-md px-2 py-1.5 outline-none text-[#fbebd9] placeholder-[#fbebd9]/35"
+          />
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <span className="text-[11px] text-[#fbebd9]/40">Enter salva · Esc cancela</span>
+            {url && (
+              <button
+                onPointerDown={(e) => e.preventDefault()} /* segura o foco para o clique valer */
+                onClick={() => { setRascunho(""); onChange(""); setEditando(false); }}
+                className="text-[11px] font-semibold text-rose-300 hover:text-rose-200 px-1.5 py-0.5 rounded focus:outline-none focus:ring-2 focus:ring-rose-300/70"
+              >
+                Remover
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ─────────────────────────  CARTÃO RETRÁTIL  ───────────────────────── */
 
 function CardRetratil({ titulo, resumo, aberto, onAlternar, onExcluir, vidro, children }) {
@@ -1059,6 +1205,42 @@ export default function App() {
   const [baseAberta, setBaseAberta] = useState({});
   const [cardAberto, setCardAberto] = useState({});
   const alternarCard = (k) => setCardAberto((m) => ({ ...m, [k]: !m[k] }));
+
+  /* Deslize horizontal troca o dia no celular. Só reage a gestos claramente
+     horizontais e rápidos — assim não briga com a rolagem nem com a edição. */
+  const toque = useRef(null);
+  const aoTocar = (e) => {
+    if (e.touches.length !== 1) { toque.current = null; return; }
+    const t = e.touches[0];
+    toque.current = { x: t.clientX, y: t.clientY, em: Date.now() };
+  };
+  const aoSoltar = (e) => {
+    const p = toque.current;
+    toque.current = null;
+    if (!p || !e.changedTouches || !e.changedTouches.length) return;
+    /* campos em edição e listas roláveis ficam de fora */
+    if (e.target && e.target.closest && e.target.closest("input, textarea, select, [data-sem-deslize]")) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - p.x;
+    const dy = t.clientY - p.y;
+    if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+    if (Date.now() - p.em > 800) return;
+    const total = estadoRef.current.roteiro.length;
+    setAtivo((i) => Math.min(total - 1, Math.max(0, i + (dx < 0 ? 1 : -1))));
+  };
+
+  /* A tira de dias rola sozinha para manter o dia atual à vista. Mexe só no
+     scroll horizontal da própria tira — nunca na rolagem da página. */
+  const tiraRef = useRef(null);
+  useEffect(() => {
+    const tira = tiraRef.current;
+    const el = tira && tira.children[ativo];
+    if (!tira || !el) return;
+    tira.scrollTo({
+      left: el.offsetLeft - tira.clientWidth / 2 + el.clientWidth / 2,
+      behavior: "smooth",
+    });
+  }, [ativo, aba]);
 
   /* No desktop, a barra horizontal cede lugar à coluna lateral ao rolar */
   const [telaLarga, setTelaLarga] = useState(
@@ -1445,7 +1627,15 @@ export default function App() {
 
   const atualizarAtiv = (diaId, ativId, campo, valor) =>
     setEstado((s) => ({ ...s, roteiro: s.roteiro.map((d) => d.id !== diaId ? d
-      : { ...d, atividades: d.atividades.map((a) => (a.id === ativId ? { ...a, [campo]: valor } : a)) }) }));
+      : { ...d, atividades: d.atividades.map((a) => {
+          if (a.id !== ativId) return a;
+          const nova = { ...a, [campo]: valor };
+          /* enquanto o ícone for automático, ele acompanha o texto */
+          if (campo === "texto" && a.tipoAuto === true) nova.tipo = tipoPorTexto(valor, a.tipo);
+          /* escolher o ícone à mão desliga o automático */
+          if (campo === "tipo") nova.tipoAuto = false;
+          return nova;
+        }) }) }));
 
   const removerAtiv = (diaId, ativId) =>
     setEstado((s) => ({ ...s, roteiro: s.roteiro.map((d) => d.id !== diaId ? d
@@ -1453,7 +1643,7 @@ export default function App() {
 
   const adicionarAtiv = (diaId) =>
     setEstado((s) => ({ ...s, roteiro: s.roteiro.map((d) => d.id !== diaId ? d
-      : { ...d, atividades: [...d.atividades, { id: `${diaId}-${Date.now()}`, hora: "00:00", texto: "Nova atividade", tipo: "ponto" }] }) }));
+      : { ...d, atividades: [...d.atividades, { id: `${diaId}-${Date.now()}`, hora: "00:00", texto: "Nova atividade", tipo: "ponto", tipoAuto: true, link: "" }] }) }));
 
   const alternarAlerta = (id) =>
     setEstado((s) => ({ ...s, alertas: s.alertas.map((a) => (a.id === id ? { ...a, feito: !a.feito } : a)) }));
@@ -1668,7 +1858,11 @@ export default function App() {
         {/* ROTEIRO */}
         {aba === "roteiro" && (
           <div>
-            <div className="flex gap-2 overflow-x-auto pb-3 mb-4 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div
+              ref={tiraRef}
+              data-sem-deslize
+              className="relative flex gap-2 overflow-x-auto pb-3 mb-4 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {estado.roteiro.map((d, i) => (
                 <button
                   key={d.id}
@@ -1686,7 +1880,12 @@ export default function App() {
               ))}
             </div>
 
-            <article className={`${vidro} rounded-2xl p-6`}>
+            <article
+              className={`${vidro} rounded-2xl p-6`}
+              onTouchStart={aoTocar}
+              onTouchEnd={aoSoltar}
+              onTouchCancel={() => { toque.current = null; }}
+            >
               <div className="flex items-start justify-between gap-4 mb-1">
                 <div className="flex items-center gap-2 text-fuchsia-300 text-[11px] font-bold uppercase tracking-[0.2em]">
                   <MapPin size={13} /> <Editavel valor={dia.base} onChange={(v) => atualizarDia(dia.id, "base", v)} />
@@ -1752,7 +1951,7 @@ export default function App() {
                   return (
                     <li
                       key={a.id}
-                      className="group flex gap-4 items-start rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.05] p-4 transition-all duration-300 hover:bg-[#fbebd9]/[0.12] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
+                      className="group relative flex gap-4 items-start rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.05] p-4 transition-all duration-300 hover:bg-[#fbebd9]/[0.12] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
                     >
                       <div className="shrink-0 flex flex-col items-center gap-1.5 w-[4.5rem]">
                         <div className="flex items-center gap-1 text-fuchsia-200 w-full justify-center">
@@ -1763,11 +1962,26 @@ export default function App() {
                             onChange={(v) => atualizarAtiv(dia.id, a.id, "hora", v)}
                           />
                         </div>
-                        <Icone size={15} className="text-[#fbebd9]/55" />
+                        <button
+                          onClick={() => {
+                            const lista = Object.keys(ic);
+                            const prox = lista[(lista.indexOf(a.tipo) + 1) % lista.length];
+                            atualizarAtiv(dia.id, a.id, "tipo", prox);
+                          }}
+                          title="Trocar o ícone da atividade"
+                          aria-label="Trocar o ícone da atividade"
+                          className="p-1 rounded-lg text-[#fbebd9]/55 hover:text-fuchsia-300 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                        >
+                          <Icone size={15} />
+                        </button>
                       </div>
                       <p className="flex-1 text-[15px] leading-relaxed text-[#fbebd9]/85 pt-0.5">
                         <Editavel valor={a.texto} multiline onChange={(v) => atualizarAtiv(dia.id, a.id, "texto", v)} />
                       </p>
+                      <LinkMidia
+                        valor={a.link}
+                        onChange={(v) => atualizarAtiv(dia.id, a.id, "link", v)}
+                      />
                       <button
                         onClick={() => removerAtiv(dia.id, a.id)}
                         aria-label="Remover atividade"
@@ -1787,7 +2001,10 @@ export default function App() {
                 >
                   <Plus size={15} /> Adicionar atividade
                 </button>
-                <div className="flex gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="sm:hidden text-[10px] uppercase tracking-wider text-[#fbebd9]/35 mr-1">
+                    deslize ↔
+                  </span>
                   <button
                     onClick={() => setAtivo((i) => Math.max(0, i - 1))}
                     disabled={ativo === 0}
