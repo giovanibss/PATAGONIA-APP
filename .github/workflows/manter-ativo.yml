@@ -1,0 +1,31 @@
+name: Manter Supabase ativo
+
+on:
+  schedule:
+    # Segundas e quintas, 12:00 UTC (09:00 em Brasília)
+    - cron: "0 12 * * 1,4"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar o banco
+        env:
+          SUPABASE_URL: https://peznylswpogypvnhbqlc.supabase.co
+          SUPABASE_KEY: sb_publishable_26Mutfbq-7lE7rKDDCjxwg_OYculaSp
+        run: |
+          codigo=$(curl -s -o /tmp/resposta.txt -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/viagens?select=id&limit=1" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY")
+
+          echo "HTTP $codigo"
+          cat /tmp/resposta.txt
+
+          if [ "$codigo" != "200" ]; then
+            echo "::error::Supabase respondeu $codigo — o projeto pode estar pausado."
+            exit 1
+          fi
+
+          echo "Ping OK — projeto ativo."
