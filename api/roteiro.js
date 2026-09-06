@@ -39,18 +39,26 @@
    copie ESTE arquivo, não os do Margem.
    ══════════════════════════════════════════════════════════════ */
 
-/* Os modelos que o seletor oferece. O app lê esta lista pelo GET, então
-   para acrescentar um modelo novo basta mexer aqui — o front-end não
-   tem nome de modelo escrito em lugar nenhum. */
+/* DOIS MODOS, DOIS MODELOS — a divisão que o Margem já provou:
+   • sugestões → Haiku, sempre. Devolver operações com ids exatos é
+     trabalho mecânico, e ele faz rápido e barato. Modelos maiores
+     gastam o orçamento raciocinando e entregam JSON pela metade.
+   • análise   → Sonnet ou Opus, escolha sua. Prosa não tem chave para
+     fechar nem parser para quebrar, então o raciocínio deles vira
+     vantagem em vez de estorvo.
+   Trocar o modelo das sugestões não é oferecido, de propósito.
+   A lista da análise mora aqui e o app a lê pelo GET — não há nome de
+   modelo escrito no front-end. */
 /* Muda a cada versão deste arquivo e aparece no GET. Serve para você
    conferir, abrindo /api/roteiro no navegador, QUAL versão está no ar —
    sem depender de olhar o repositório ou os logs. */
-const VERSAO = 'esm-4';
+const VERSAO = 'esm-5';
+
+const MODELO_SUGESTOES = { id: 'claude-haiku-4-5-20251001', nome: 'Haiku 4.5' };
 
 const MODELOS = [
-  { id: 'claude-sonnet-5',            nome: 'Sonnet 5',   nota: 'equilibrado — o padrão' },
-  { id: 'claude-opus-5',              nome: 'Opus 5',     nota: 'raciocínio mais fino, mais caro' },
-  { id: 'claude-haiku-4-5-20251001',  nome: 'Haiku 4.5',  nota: 'o mais rápido e barato' },
+  { id: 'claude-sonnet-5', nome: 'Sonnet 5', nota: 'equilibrado — o padrão' },
+  { id: 'claude-opus-5',   nome: 'Opus 5',   nota: 'raciocínio mais fino, mais caro' },
 ];
 
 const PADRAO = MODELOS.some(m => m.id === process.env.ROTEIRO_MODELO)
@@ -129,6 +137,25 @@ Em "editar_atividade", mande "hora", "texto", ou os dois.
 Escreva os textos de atividade no mesmo estilo dos que já estão lá: descritivos, sem emoji, com "· RESERVAR" no fim quando exigir reserva antecipada.
 
 Seja econômico: nada de repetir o roteiro recebido, nada de listar o que você NÃO vai mudar, nada de comentário fora do JSON.`;
+
+
+const SISTEMA_ANALISE = `Você é o consultor de viagem de um brasileiro que organiza uma viagem em família à Patagônia (Argentina e Chile), em dezembro, num app chamado Kooka Planner que ele mesmo mandou construir. Viajam dois adultos e uma criança pequena, de carro alugado, com travessia de fronteira entre os dois países.
+
+Você recebe o roteiro completo — dias, bases, atividades — e as hospedagens ativas com os dias que cada hotel cobre. É a hospedagem que diz quantas noites há de fato em cada base.
+
+REGRAS:
+- Responda em prosa. Você não edita o roteiro e não devolve JSON: quem propõe alterações é o outro modo do app, e é o usuário quem aprova uma a uma.
+- Não invente atrativo, horário de funcionamento nem preço. Se não tiver certeza de que um lugar existe e fica onde você acha que fica, diga que não sabe.
+- Não fale de dinheiro: os custos são controlados em outra aba, por outro cálculo.
+- Leve a sério o que a Patagônia impõe: distâncias grandes, estradas lentas, vento, clima que vira em uma hora, e uma criança pequena que não faz trilha longa nem dia de dezesseis horas.
+- Se algo no roteiro for arriscado — conexão apertada, travessia de fronteira em cima da hora, passeio com restrição de idade, dia sem folga nenhuma — diga isso primeiro, mesmo que não tenham perguntado.
+
+COMO ESCREVER:
+- Direto ao ponto, sem saudação e sem títulos. Português do Brasil.
+- Prosa corrida. Use lista só se a pergunta pedir vários itens paralelos.
+- Normalmente de 3 a 8 frases. Só alongue se a pergunta realmente exigir.
+- Quando houver ressalva importante, diga a ressalva.
+- Se não souber, diga que não sabe.`;
 
 /* ── Portaria ─────────────────────────────────────────────────
    Passa quem veio do mesmo domínio da função. O Origin é mandado pelo
@@ -275,7 +302,7 @@ export default async function handler(req, res) {
   /* O seletor de modelos do app se abastece daqui. Não gasta API e não
      revela nada, então dispensa portaria. */
   if (req.method === 'GET')
-    return res.status(200).json({ versao: VERSAO, modelos: MODELOS, padrao: PADRAO });
+    return res.status(200).json({ versao: VERSAO, sugestoes: MODELO_SUGESTOES, modelos: MODELOS, padrao: PADRAO });
 
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Use POST.' });
 
@@ -296,9 +323,14 @@ export default async function handler(req, res) {
   if (!Array.isArray(roteiro) || !roteiro.length)
     return res.status(400).json({ erro: 'Falta o roteiro.' });
 
+  const analise = corpo.modo === 'analise';
+
   /* Só um modelo da lista entra. Nome vindo do navegador não vira
-     parâmetro de chamada paga sem passar por aqui. */
-  const modelo = MODELOS.some(m => m.id === corpo.modelo) ? corpo.modelo : PADRAO;
+     parâmetro de chamada paga sem passar por aqui. E as sugestões nem
+     aceitam escolha: são sempre do Haiku. */
+  const modelo = analise
+    ? (MODELOS.some(m => m.id === corpo.modelo) ? corpo.modelo : PADRAO)
+    : MODELO_SUGESTOES.id;
 
   /* Só o que o modelo precisa ler. Custos, localizadores e links ficam
      de fora: não entram na decisão e encareceriam a chamada. */
@@ -316,14 +348,20 @@ export default async function handler(req, res) {
       .map(s => ({ hotel: s.hotel || '(sem nome)', diasIds: s.diasIds || [] }))
   })).filter(b => b.hoteis.length);
 
+  const texto_pedido = String(pedido || '').trim().slice(0, 2000);
+
   const pergunta =
     'Roteiro atual:\n\n' + JSON.stringify(dias, null, 1) +
     '\n\nHospedagem ativa (é ela que manda em quantas noites há em cada base):\n\n' +
     JSON.stringify(bases, null, 1) +
     '\n\n---\n\n' +
-    (String(pedido || '').trim()
-      ? 'Pedido do usuário: ' + String(pedido).trim().slice(0, 1500)
-      : 'Sem pedido específico. Confira se o roteiro continua coerente com a hospedagem e proponha o que fizer sentido.');
+    (analise
+      ? (texto_pedido
+          ? 'Minha pergunta: ' + texto_pedido
+          : 'Analise o roteiro e me diga o que merece atenção.')
+      : (texto_pedido
+          ? 'Pedido do usuário: ' + texto_pedido
+          : 'Sem pedido específico. Confira se o roteiro continua coerente com a hospedagem e proponha o que fizer sentido.'));
 
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -335,14 +373,11 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: modelo,
-        /* Teto largo de propósito. Só os tokens realmente escritos são
-           cobrados, então um teto alto não gasta nada quando não é usado —
-           ele existe para a resposta não ser cortada, não para economizar.
-           Com 3000 e depois com 8000, Opus e Sonnet ainda vinham cortados:
-           esses modelos raciocinam antes de escrever, e o raciocínio consome
-           o mesmo orçamento. O Haiku, mais direto, passava nos dois. */
-        max_tokens: 32000,
-        system: SISTEMA,
+        /* Teto largo na análise porque Sonnet e Opus raciocinam antes de
+           escrever, e o raciocínio consome o mesmo orçamento. Só os tokens
+           realmente escritos são cobrados, então sobra folga não custa. */
+        max_tokens: analise ? 16000 : 8000,
+        system: analise ? SISTEMA_ANALISE : SISTEMA,
         messages: [{ role: 'user', content: pergunta }]
       })
     });
@@ -359,6 +394,16 @@ export default async function handler(req, res) {
 
     const j = await r.json();
     const texto = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+
+    /* A análise vai embora aqui: é prosa, não passa por parser nenhum. */
+    if (analise) {
+      if (!texto) return res.status(502).json({ erro: 'O modelo respondeu vazio. Tente de novo.' });
+      return res.status(200).json({
+        texto, modelo,
+        custo: j.usage ? { entrada: j.usage.input_tokens, saida: j.usage.output_tokens } : null
+      });
+    }
+
     const dados = lerJSON(texto);
     if (!dados) {
       /* Sem isso o erro é sempre o mesmo e não dá para saber o que houve. */
