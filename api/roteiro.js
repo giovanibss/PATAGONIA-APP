@@ -29,11 +29,24 @@
    apontar para um dia ou atividade que não existe, é descartada.
 
    A chave da API vive só aqui, no servidor. O navegador nunca a vê.
+
+   ESTILO DE MÓDULO: este arquivo é ESM (export default), e não
+   CommonJS como as funções do Margem. O package.json do Kooka tem
+   "type": "module" — coisa de projeto Vite —, e isso faz o Node
+   tratar todo .js como módulo ES. Um module.exports aqui derruba a
+   função em tempo de execução com "module is not defined in ES
+   module scope". Se um dia você criar outra função nesta pasta,
+   copie ESTE arquivo, não os do Margem.
    ══════════════════════════════════════════════════════════════ */
 
 /* Os modelos que o seletor oferece. O app lê esta lista pelo GET, então
    para acrescentar um modelo novo basta mexer aqui — o front-end não
    tem nome de modelo escrito em lugar nenhum. */
+/* Muda a cada versão deste arquivo e aparece no GET. Serve para você
+   conferir, abrindo /api/roteiro no navegador, QUAL versão está no ar —
+   sem depender de olhar o repositório ou os logs. */
+const VERSAO = 'esm-1';
+
 const MODELOS = [
   { id: 'claude-sonnet-5',            nome: 'Sonnet 5',   nota: 'equilibrado — o padrão' },
   { id: 'claude-opus-5',              nome: 'Opus 5',     nota: 'raciocínio mais fino, mais caro' },
@@ -230,11 +243,11 @@ function lerJSON(texto) {
   return null;
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   /* O seletor de modelos do app se abastece daqui. Não gasta API e não
      revela nada, então dispensa portaria. */
   if (req.method === 'GET')
-    return res.status(200).json({ modelos: MODELOS, padrao: PADRAO });
+    return res.status(200).json({ versao: VERSAO, modelos: MODELOS, padrao: PADRAO });
 
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Use POST.' });
 
@@ -327,9 +340,7 @@ module.exports = async (req, res) => {
   } catch (e) {
     return res.status(500).json({ erro: String(e.message || e) });
   }
-};
+}
 
-module.exports.MODELOS = MODELOS;
-module.exports.conferir = conferir;
-module.exports.lerJSON = lerJSON;
-module.exports.veioDoSite = veioDoSite;
+/* Exportados para teste; a Vercel só usa o export default acima. */
+export { VERSAO, MODELOS, conferir, lerJSON, veioDoSite };
