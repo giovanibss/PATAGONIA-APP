@@ -45,7 +45,7 @@
 /* Muda a cada versão deste arquivo e aparece no GET. Serve para você
    conferir, abrindo /api/roteiro no navegador, QUAL versão está no ar —
    sem depender de olhar o repositório ou os logs. */
-const VERSAO = 'esm-1';
+const VERSAO = 'esm-3';
 
 const MODELOS = [
   { id: 'claude-sonnet-5',            nome: 'Sonnet 5',   nota: 'equilibrado — o padrão' },
@@ -231,15 +231,41 @@ function conferir(sugestoes, roteiro) {
   return { sugestoes: out.slice(0, 8), descartadas };
 }
 
+/* Salva o que dá de uma resposta cortada no meio: corta no último objeto
+   que fechou e fecha na mão os colchetes e chaves que ficaram abertos.
+   Perde a última sugestão, que veio pela metade, e preserva as anteriores —
+   melhor do que devolver erro e perder todas. */
+function repararJSON(t) {
+  const fim = t.lastIndexOf('}');
+  if (fim < 0) return null;
+  const corte = t.slice(0, fim + 1);
+  const pilha = [];
+  let texto = false, escape = false;
+  for (const c of corte) {
+    if (escape) { escape = false; continue; }
+    if (c === '\\') { escape = true; continue; }
+    if (c === '"') { texto = !texto; continue; }
+    if (texto) continue;
+    if (c === '{' || c === '[') pilha.push(c);
+    else if (c === '}' || c === ']') pilha.pop();
+  }
+  let s = corte;
+  while (pilha.length) s += pilha.pop() === '{' ? '}' : ']';
+  try { return JSON.parse(s); } catch (e) { return null; }
+}
+
 /* O modelo às vezes embrulha o JSON em cerca de código, mesmo mandado
    não fazer. Tira a cerca e, se ainda assim não abrir, pega o maior
    trecho entre chaves. */
 function lerJSON(texto) {
   let t = String(texto || '').trim();
-  t = t.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  /* cerca de código em qualquer lugar do texto, não só nas pontas */
+  const cerca = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (cerca) t = cerca[1].trim();
   try { return JSON.parse(t); } catch (e) { /* segue */ }
   const i = t.indexOf('{'), f = t.lastIndexOf('}');
   if (i >= 0 && f > i) { try { return JSON.parse(t.slice(i, f + 1)); } catch (e) { /* segue */ } }
+  if (i >= 0) return repararJSON(t.slice(i)); /* última tentativa: cortado */
   return null;
 }
 
@@ -307,7 +333,11 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: modelo,
-        max_tokens: 3000,
+        /* Folgado de propósito. Com 3000, Opus e Sonnet tinham a resposta
+           cortada no meio de uma sugestão e o JSON não fechava; o Haiku,
+           mais econômico, passava. Teto alto não custa nada quando não é
+           usado — só os tokens realmente escritos são cobrados. */
+        max_tokens: 8000,
         system: SISTEMA,
         messages: [{ role: 'user', content: pergunta }]
       })
@@ -326,7 +356,16 @@ export default async function handler(req, res) {
     const j = await r.json();
     const texto = (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
     const dados = lerJSON(texto);
-    if (!dados) return res.status(502).json({ erro: 'O modelo não devolveu um JSON legível. Tente de novo.', detalhe: texto.slice(0, 200) });
+    if (!dados) {
+      /* Sem isso o erro é sempre o mesmo e não dá para saber o que houve. */
+      const cortado = j.stop_reason === 'max_tokens';
+      return res.status(502).json({
+        erro: cortado
+          ? 'A resposta foi cortada antes do fim. Tente de novo, ou peça menos coisas de uma vez.'
+          : 'Não consegui ler a resposta do modelo. Começo do que veio: ' + texto.slice(0, 150),
+        detalhe: texto.slice(0, 400)
+      });
+    }
 
     const { sugestoes, descartadas } = conferir(dados.sugestoes, roteiro);
     if (descartadas.length) console.log('[kooka/roteiro] descartadas', JSON.stringify(descartadas));
@@ -343,4 +382,4 @@ export default async function handler(req, res) {
 }
 
 /* Exportados para teste; a Vercel só usa o export default acima. */
-export { VERSAO, MODELOS, conferir, lerJSON, veioDoSite };
+export { VERSAO, MODELOS, conferir, lerJSON, repararJSON, veioDoSite };
