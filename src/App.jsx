@@ -1193,17 +1193,25 @@ function CardRetratil({ titulo, resumo, aberto, onAlternar, onExcluir, vidro, ch
    entra no roteiro sem um clique em "aplicar". */
 function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, aoAplicar }) {
   const [modelos, setModelos] = useState([]);
+  const [modeloSug, setModeloSug] = useState("");
   const [modelo, setModelo] = useState("");
+
+  /* Sugestões — o Haiku devolve operações, você aprova uma a uma */
   const [pedido, setPedido] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
   const [resumo, setResumo] = useState("");
   const [sugestoes, setSugestoes] = useState([]);
   const [resolvidas, setResolvidas] = useState({});
-  const [custo, setCusto] = useState(null);
 
-  /* A lista de modelos mora na função do servidor — o app não tem nome de
-     modelo escrito em lugar nenhum. Busca só na primeira abertura. */
+  /* Análise — Sonnet ou Opus, resposta escrita, não mexe em nada */
+  const [pergunta, setPergunta] = useState("");
+  const [analisando, setAnalisando] = useState(false);
+  const [erroAnalise, setErroAnalise] = useState("");
+  const [analise, setAnalise] = useState("");
+
+  /* Os modelos moram na função do servidor — o app não tem nome de modelo
+     escrito em lugar nenhum. Busca só na primeira abertura. */
   useEffect(() => {
     if (!aberto || modelos.length) return;
     let vivo = true;
@@ -1214,6 +1222,7 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
         const j = await r.json();
         if (!vivo || !Array.isArray(j.modelos) || !j.modelos.length) return;
         setModelos(j.modelos);
+        setModeloSug(j.sugestoes?.nome || "");
         setModelo((m) => m || j.padrao || j.modelos[0].id);
       } catch (e) {
         if (vivo) setErro("Não achei /api/roteiro. Confira se a função está publicada na Vercel.");
@@ -1222,30 +1231,42 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
     return () => { vivo = false; };
   }, [aberto, modelos.length]);
 
+  const chamar = async (corpo) => {
+    const r = await fetch("/api/roteiro", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roteiro: estado.roteiro, hospedagens: estado.hospedagens, ...corpo }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.erro || `A função respondeu ${r.status}.`);
+    return j;
+  };
+
   const consultar = async () => {
     setCarregando(true);
-    setErro(""); setResumo(""); setSugestoes([]); setResolvidas({}); setCusto(null);
+    setErro(""); setResumo(""); setSugestoes([]); setResolvidas({});
     try {
-      const r = await fetch("/api/roteiro", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelo,
-          pedido,
-          roteiro: estado.roteiro,
-          hospedagens: estado.hospedagens,
-        }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.erro || `A função respondeu ${r.status}.`);
+      const j = await chamar({ pedido });
       setResumo(j.resumo || "");
       setSugestoes(Array.isArray(j.sugestoes) ? j.sugestoes : []);
-      setCusto(j.custo || null);
-      onRevisado(); /* consultou é o mesmo que revisar: a faixa some */
+      onRevisado(); /* consultar é revisar: a faixa some */
     } catch (e) {
       setErro(String(e.message || e));
     } finally {
       setCarregando(false);
+    }
+  };
+
+  const analisar = async () => {
+    setAnalisando(true);
+    setErroAnalise(""); setAnalise("");
+    try {
+      const j = await chamar({ modo: "analise", modelo, pedido: pergunta });
+      setAnalise(j.texto || "");
+    } catch (e) {
+      setErroAnalise(String(e.message || e));
+    } finally {
+      setAnalisando(false);
     }
   };
 
@@ -1265,6 +1286,15 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
   };
 
   const pendentes = sugestoes.filter((s) => !resolvidas[s.id]).length;
+  const campo = "w-full text-sm bg-[#fbebd9]/[0.07] border border-[#fbebd9]/15 rounded-xl px-3 py-2.5 outline-none resize-none text-[#fbebd9] placeholder-[#fbebd9]/35 focus:border-fuchsia-300/60 focus:ring-2 focus:ring-fuchsia-300/30 transition-colors";
+  const botao = "flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-200 hover:bg-fuchsia-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70";
+
+  const Falha = ({ texto }) => (
+    <div className="flex items-start gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+      <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+      <span className="min-w-0">{texto}</span>
+    </div>
+  );
 
   return (
     <div className={`${vidro} rounded-2xl p-5 ${aviso ? "ring-1 ring-fuchsia-400/40" : ""}`}>
@@ -1290,115 +1320,140 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
 
       {aberto && (
         <div className="mt-4 space-y-4" data-sem-deslize>
-          <p className="text-sm text-[#fbebd9]/50">
-            Ele lê os dias, as atividades e os hotéis ativos, e propõe remanejos.
-            Nada muda no roteiro até você aplicar.
-          </p>
+          {/* ── Sugestões ── */}
+          <div className="space-y-3">
+            <p className="text-sm text-[#fbebd9]/50">
+              Ele lê os dias, as atividades e os hotéis ativos, e propõe remanejos.
+              Nada muda no roteiro até você aplicar.
+            </p>
 
-          <textarea
-            value={pedido}
-            onChange={(e) => setPedido(e.target.value)}
-            rows={2}
-            placeholder="O que mudou? Ex.: troquei o hotel de Puerto Natales, agora são 3 noites dentro do parque."
-            className="w-full text-sm bg-[#fbebd9]/[0.07] border border-[#fbebd9]/15 rounded-xl px-3 py-2.5 outline-none resize-none text-[#fbebd9] placeholder-[#fbebd9]/35 focus:border-fuchsia-300/60 focus:ring-2 focus:ring-fuchsia-300/30 transition-colors"
-          />
+            <textarea
+              value={pedido}
+              onChange={(e) => setPedido(e.target.value)}
+              rows={2}
+              placeholder="O que mudou? Ex.: troquei o hotel de Puerto Natales, agora são 3 noites dentro do parque."
+              className={campo}
+            />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={modelo}
-              onChange={(e) => setModelo(e.target.value)}
-              aria-label="Modelo"
-              disabled={!modelos.length}
-              className="text-xs font-semibold py-2 px-2.5 rounded-lg bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 disabled:opacity-40 [&>option]:bg-zinc-800"
-            >
-              {modelos.length
-                ? modelos.map((m) => <option key={m.id} value={m.id}>{m.nome} — {m.nota}</option>)
-                : <option>carregando…</option>}
-            </select>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={consultar} disabled={carregando} className={botao}>
+                {carregando
+                  ? <><RefreshCw size={14} className="animate-spin" /> Pensando…</>
+                  : <><Sparkles size={14} /> Sugerir mudanças</>}
+              </button>
+              {modeloSug && (
+                <span className="text-[10px] uppercase tracking-wider text-[#fbebd9]/35">
+                  {modeloSug}
+                </span>
+              )}
+            </div>
 
-            <button
-              onClick={consultar}
-              disabled={carregando || !modelo}
-              className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-200 hover:bg-fuchsia-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
-            >
-              {carregando
-                ? <><RefreshCw size={14} className="animate-spin" /> Pensando…</>
-                : <><Sparkles size={14} /> Consultar</>}
-            </button>
+            {erro && <Falha texto={erro} />}
+            {resumo && <p className="text-sm text-[#fbebd9]/75 leading-relaxed">{resumo}</p>}
 
-            {custo && (
-              <span className="text-[10px] text-[#fbebd9]/35 tabular-nums ml-auto">
-                {custo.entrada + custo.saida} tokens
-              </span>
+            {sugestoes.length > 0 && (
+              <ul className="space-y-2.5">
+                {sugestoes.map((s) => {
+                  const feito = resolvidas[s.id];
+                  return (
+                    <li
+                      key={s.id}
+                      className={`rounded-xl border p-4 transition-all duration-300 ${
+                        feito === "aplicada" ? "border-emerald-400/30 bg-emerald-500/[0.08]"
+                        : feito ? "border-[#fbebd9]/10 bg-[#fbebd9]/[0.03] opacity-45"
+                        : "border-[#fbebd9]/10 bg-[#fbebd9]/[0.05]"
+                      }`}
+                    >
+                      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-fuchsia-300/85 mb-1.5">
+                        {alvo(s)}
+                      </div>
+                      <div className="text-[15px] leading-snug text-[#fbebd9]/90">{s.titulo}</div>
+                      {s.texto && (
+                        <div className="mt-1.5 text-sm text-[#fbebd9]/70 italic">
+                          {s.hora ? `${s.hora} · ` : ""}{s.texto}
+                        </div>
+                      )}
+                      {s.valor && <div className="mt-1.5 text-sm text-[#fbebd9]/70 italic">{s.valor}</div>}
+                      {s.porque && <p className="mt-2 text-sm text-[#fbebd9]/50 leading-relaxed">{s.porque}</p>}
+
+                      {feito ? (
+                        <div className="mt-3 text-[11px] uppercase tracking-wider text-[#fbebd9]/45">
+                          {feito === "aplicada" ? "aplicada ao roteiro" : "descartada"}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-3">
+                          <button
+                            onClick={() => {
+                              aoAplicar(s);
+                              setResolvidas((m) => ({ ...m, [s.id]: "aplicada" }));
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
+                          >
+                            <Check size={13} /> Aplicar
+                          </button>
+                          <button
+                            onClick={() => setResolvidas((m) => ({ ...m, [s.id]: "descartada" }))}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg text-[#fbebd9]/50 hover:text-[#fbebd9]/80 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                          >
+                            <X size={13} /> Descartar
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {!carregando && !erro && resumo && sugestoes.length === 0 && (
+              <p className="text-sm text-[#fbebd9]/45 italic">Nenhuma mudança proposta.</p>
             )}
           </div>
 
-          {erro && (
-            <div className="flex items-start gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
-              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
-              <span className="min-w-0">{erro}</span>
+          {/* ── Análise escrita ── */}
+          <div className="pt-4 border-t border-[#fbebd9]/10 space-y-3">
+            <div className="font-titulo text-[11px] uppercase tracking-[0.2em] text-fuchsia-300/85">
+              Análise escrita
             </div>
-          )}
+            <p className="text-sm text-[#fbebd9]/50">
+              Para pensar junto, não para mexer. A resposta vem em texto e não altera o roteiro.
+            </p>
 
-          {resumo && <p className="text-sm text-[#fbebd9]/75 leading-relaxed">{resumo}</p>}
+            <textarea
+              value={pergunta}
+              onChange={(e) => setPergunta(e.target.value)}
+              rows={2}
+              placeholder="O dia 6 dá conta da travessia da fronteira e ainda do parque? O que você tiraria desse roteiro?"
+              className={campo}
+            />
 
-          {sugestoes.length > 0 && (
-            <ul className="space-y-2.5">
-              {sugestoes.map((s) => {
-                const feito = resolvidas[s.id];
-                return (
-                  <li
-                    key={s.id}
-                    className={`rounded-xl border p-4 transition-all duration-300 ${
-                      feito === "aplicada" ? "border-emerald-400/30 bg-emerald-500/[0.08]"
-                      : feito ? "border-[#fbebd9]/10 bg-[#fbebd9]/[0.03] opacity-45"
-                      : "border-[#fbebd9]/10 bg-[#fbebd9]/[0.05]"
-                    }`}
-                  >
-                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-fuchsia-300/85 mb-1.5">
-                      {alvo(s)}
-                    </div>
-                    <div className="text-[15px] leading-snug text-[#fbebd9]/90">{s.titulo}</div>
-                    {s.texto && (
-                      <div className="mt-1.5 text-sm text-[#fbebd9]/70 italic">
-                        {s.hora ? `${s.hora} · ` : ""}{s.texto}
-                      </div>
-                    )}
-                    {s.valor && <div className="mt-1.5 text-sm text-[#fbebd9]/70 italic">{s.valor}</div>}
-                    {s.porque && <p className="mt-2 text-sm text-[#fbebd9]/50 leading-relaxed">{s.porque}</p>}
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={modelo}
+                onChange={(e) => setModelo(e.target.value)}
+                aria-label="Modelo da análise"
+                disabled={!modelos.length}
+                className="text-xs font-semibold py-2 px-2.5 rounded-lg bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 disabled:opacity-40 [&>option]:bg-zinc-800"
+              >
+                {modelos.length
+                  ? modelos.map((m) => <option key={m.id} value={m.id}>{m.nome} — {m.nota}</option>)
+                  : <option>carregando…</option>}
+              </select>
 
-                    {feito ? (
-                      <div className="mt-3 text-[11px] uppercase tracking-wider text-[#fbebd9]/45">
-                        {feito === "aplicada" ? "aplicada ao roteiro" : "descartada"}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 mt-3">
-                        <button
-                          onClick={() => {
-                            aoAplicar(s);
-                            setResolvidas((m) => ({ ...m, [s.id]: "aplicada" }));
-                          }}
-                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
-                        >
-                          <Check size={13} /> Aplicar
-                        </button>
-                        <button
-                          onClick={() => setResolvidas((m) => ({ ...m, [s.id]: "descartada" }))}
-                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg text-[#fbebd9]/50 hover:text-[#fbebd9]/80 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
-                        >
-                          <X size={13} /> Descartar
-                        </button>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+              <button onClick={analisar} disabled={analisando || !modelo} className={botao}>
+                {analisando
+                  ? <><RefreshCw size={14} className="animate-spin" /> Analisando…</>
+                  : <><Sparkles size={14} /> Analisar</>}
+              </button>
+            </div>
 
-          {!carregando && !erro && resumo && sugestoes.length === 0 && (
-            <p className="text-sm text-[#fbebd9]/45 italic">Nenhuma mudança proposta.</p>
-          )}
+            {erroAnalise && <Falha texto={erroAnalise} />}
+            {analise && (
+              <div className="rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.05] p-4 text-[15px] leading-relaxed text-[#fbebd9]/85 whitespace-pre-wrap">
+                {analise}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
