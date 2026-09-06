@@ -5,6 +5,7 @@ import {
   BedDouble, Pencil, Ship, Utensils, Car, Footprints,
   Instagram, Youtube, Link2,
   Cloud, CloudOff, RefreshCw, ChevronDown, Banknote, CalendarClock, Ticket, ExternalLink,
+  Sparkles, X,
 } from "lucide-react";
 import { configurado, carregarNuvem, salvarNuvem, ouvirNuvem, ID_VIAGEM } from "./supabase";
 
@@ -371,6 +372,10 @@ function migrar(bruto) {
   return e;
 }
 const CHAVE = "patagonia-dez-2026";
+
+/* Assinatura da hospedagem já revisada pelo agente. Fica no aparelho, e não
+   no estado da viagem: é lembrete de leitura, não dado a sincronizar. */
+const CHAVE_AGENTE = "kooka-hospedagem-vista";
 
 /* Fundos cênicos em rotação. Troque por fotos suas colocando os arquivos
    em public/fundos/ e usando caminhos como "/fundos/fitzroy.jpg". */
@@ -1179,6 +1184,227 @@ function CardRetratil({ titulo, resumo, aberto, onAlternar, onExcluir, vidro, ch
   );
 }
 
+
+/* ─────────────────────────  AGENTE DO ROTEIRO  ───────────────────────── */
+
+/* Conversa com /api/roteiro, a função na Vercel que guarda a chave da API.
+   O modelo nunca edita nada: devolve operações, o servidor confere cada uma
+   contra os ids que existem de verdade, e aqui elas viram cartões. Nada
+   entra no roteiro sem um clique em "aplicar". */
+function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, aoAplicar }) {
+  const [modelos, setModelos] = useState([]);
+  const [modelo, setModelo] = useState("");
+  const [pedido, setPedido] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [resumo, setResumo] = useState("");
+  const [sugestoes, setSugestoes] = useState([]);
+  const [resolvidas, setResolvidas] = useState({});
+  const [custo, setCusto] = useState(null);
+
+  /* A lista de modelos mora na função do servidor — o app não tem nome de
+     modelo escrito em lugar nenhum. Busca só na primeira abertura. */
+  useEffect(() => {
+    if (!aberto || modelos.length) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/roteiro");
+        if (!r.ok) throw new Error("resposta " + r.status);
+        const j = await r.json();
+        if (!vivo || !Array.isArray(j.modelos) || !j.modelos.length) return;
+        setModelos(j.modelos);
+        setModelo((m) => m || j.padrao || j.modelos[0].id);
+      } catch (e) {
+        if (vivo) setErro("Não achei /api/roteiro. Confira se a função está publicada na Vercel.");
+      }
+    })();
+    return () => { vivo = false; };
+  }, [aberto, modelos.length]);
+
+  const consultar = async () => {
+    setCarregando(true);
+    setErro(""); setResumo(""); setSugestoes([]); setResolvidas({}); setCusto(null);
+    try {
+      const r = await fetch("/api/roteiro", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelo,
+          pedido,
+          roteiro: estado.roteiro,
+          hospedagens: estado.hospedagens,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.erro || `A função respondeu ${r.status}.`);
+      setResumo(j.resumo || "");
+      setSugestoes(Array.isArray(j.sugestoes) ? j.sugestoes : []);
+      setCusto(j.custo || null);
+      onRevisado(); /* consultou é o mesmo que revisar: a faixa some */
+    } catch (e) {
+      setErro(String(e.message || e));
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const rotuloDia = (id) => {
+    const d = (estado.roteiro || []).find((x) => x.id === id);
+    return d ? `Dia ${d.n}` : "dia";
+  };
+
+  /* Cabeçalho de cada cartão: diz em uma linha o que a operação faz e onde. */
+  const alvo = (s) => {
+    if (s.tipo === "mover") return `Mover · ${rotuloDia(s.deDiaId)} → ${rotuloDia(s.paraDiaId)}`;
+    if (s.tipo === "criar") return `Nova atividade · ${rotuloDia(s.diaId)}`;
+    if (s.tipo === "remover") return `Remover · ${rotuloDia(s.deDiaId)}`;
+    if (s.tipo === "editar_atividade") return `Ajustar · ${rotuloDia(s.deDiaId)}`;
+    if (s.tipo === "editar_dia") return `${rotuloDia(s.diaId)} · ${s.campo}`;
+    return "Sugestão";
+  };
+
+  const pendentes = sugestoes.filter((s) => !resolvidas[s.id]).length;
+
+  return (
+    <div className={`${vidro} rounded-2xl p-5 ${aviso ? "ring-1 ring-fuchsia-400/40" : ""}`}>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onAlternar}
+          aria-expanded={aberto}
+          className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-lg focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+        >
+          <ChevronDown
+            size={18}
+            className={`shrink-0 text-[#fbebd9]/55 transition-transform duration-300 ${aberto ? "rotate-180" : ""}`}
+          />
+          <Sparkles size={15} className="shrink-0 text-fuchsia-300" />
+          <h3 className="font-titulo text-lg font-medium tracking-wide truncate">Agente do roteiro</h3>
+        </button>
+        {pendentes > 0 && (
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-fuchsia-500/20 text-fuchsia-200">
+            {pendentes} sugest{pendentes === 1 ? "ão" : "ões"}
+          </span>
+        )}
+      </div>
+
+      {aberto && (
+        <div className="mt-4 space-y-4" data-sem-deslize>
+          <p className="text-sm text-[#fbebd9]/50">
+            Ele lê os dias, as atividades e os hotéis ativos, e propõe remanejos.
+            Nada muda no roteiro até você aplicar.
+          </p>
+
+          <textarea
+            value={pedido}
+            onChange={(e) => setPedido(e.target.value)}
+            rows={2}
+            placeholder="O que mudou? Ex.: troquei o hotel de Puerto Natales, agora são 3 noites dentro do parque."
+            className="w-full text-sm bg-[#fbebd9]/[0.07] border border-[#fbebd9]/15 rounded-xl px-3 py-2.5 outline-none resize-none text-[#fbebd9] placeholder-[#fbebd9]/35 focus:border-fuchsia-300/60 focus:ring-2 focus:ring-fuchsia-300/30 transition-colors"
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={modelo}
+              onChange={(e) => setModelo(e.target.value)}
+              aria-label="Modelo"
+              disabled={!modelos.length}
+              className="text-xs font-semibold py-2 px-2.5 rounded-lg bg-[#fbebd9]/10 text-[#fbebd9]/80 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-fuchsia-300/70 disabled:opacity-40 [&>option]:bg-zinc-800"
+            >
+              {modelos.length
+                ? modelos.map((m) => <option key={m.id} value={m.id}>{m.nome} — {m.nota}</option>)
+                : <option>carregando…</option>}
+            </select>
+
+            <button
+              onClick={consultar}
+              disabled={carregando || !modelo}
+              className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg bg-fuchsia-500/20 text-fuchsia-200 hover:bg-fuchsia-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+            >
+              {carregando
+                ? <><RefreshCw size={14} className="animate-spin" /> Pensando…</>
+                : <><Sparkles size={14} /> Consultar</>}
+            </button>
+
+            {custo && (
+              <span className="text-[10px] text-[#fbebd9]/35 tabular-nums ml-auto">
+                {custo.entrada + custo.saida} tokens
+              </span>
+            )}
+          </div>
+
+          {erro && (
+            <div className="flex items-start gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span className="min-w-0">{erro}</span>
+            </div>
+          )}
+
+          {resumo && <p className="text-sm text-[#fbebd9]/75 leading-relaxed">{resumo}</p>}
+
+          {sugestoes.length > 0 && (
+            <ul className="space-y-2.5">
+              {sugestoes.map((s) => {
+                const feito = resolvidas[s.id];
+                return (
+                  <li
+                    key={s.id}
+                    className={`rounded-xl border p-4 transition-all duration-300 ${
+                      feito === "aplicada" ? "border-emerald-400/30 bg-emerald-500/[0.08]"
+                      : feito ? "border-[#fbebd9]/10 bg-[#fbebd9]/[0.03] opacity-45"
+                      : "border-[#fbebd9]/10 bg-[#fbebd9]/[0.05]"
+                    }`}
+                  >
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-fuchsia-300/85 mb-1.5">
+                      {alvo(s)}
+                    </div>
+                    <div className="text-[15px] leading-snug text-[#fbebd9]/90">{s.titulo}</div>
+                    {s.texto && (
+                      <div className="mt-1.5 text-sm text-[#fbebd9]/70 italic">
+                        {s.hora ? `${s.hora} · ` : ""}{s.texto}
+                      </div>
+                    )}
+                    {s.valor && <div className="mt-1.5 text-sm text-[#fbebd9]/70 italic">{s.valor}</div>}
+                    {s.porque && <p className="mt-2 text-sm text-[#fbebd9]/50 leading-relaxed">{s.porque}</p>}
+
+                    {feito ? (
+                      <div className="mt-3 text-[11px] uppercase tracking-wider text-[#fbebd9]/45">
+                        {feito === "aplicada" ? "aplicada ao roteiro" : "descartada"}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          onClick={() => {
+                            aoAplicar(s);
+                            setResolvidas((m) => ({ ...m, [s.id]: "aplicada" }));
+                          }}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
+                        >
+                          <Check size={13} /> Aplicar
+                        </button>
+                        <button
+                          onClick={() => setResolvidas((m) => ({ ...m, [s.id]: "descartada" }))}
+                          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg text-[#fbebd9]/50 hover:text-[#fbebd9]/80 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                        >
+                          <X size={13} /> Descartar
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {!carregando && !erro && resumo && sugestoes.length === 0 && (
+            <p className="text-sm text-[#fbebd9]/45 italic">Nenhuma mudança proposta.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─────────────────────────  APP  ───────────────────────── */
 
 export default function App() {
@@ -1205,6 +1431,49 @@ export default function App() {
   const [baseAberta, setBaseAberta] = useState({});
   const [cardAberto, setCardAberto] = useState({});
   const alternarCard = (k) => setCardAberto((m) => ({ ...m, [k]: !m[k] }));
+  const [agenteAberto, setAgenteAberto] = useState(false);
+  const agenteRef = useRef(null);
+
+  /* ── Lembrete de revisão ──
+     A hospedagem é quem decide quantas noites há em cada base; quando ela
+     muda, o roteiro pode ter ficado desencontrado. A assinatura resume só o
+     que importa para essa comparação: hotel ativo e dias que ele cobre.
+     Preço e localizador mudam toda hora e não pedem revisão de roteiro. */
+  const assinaturaHosp = useMemo(
+    () => JSON.stringify(
+      (estado.hospedagens || []).map((b) => [
+        b.nome,
+        (b.slots || [])
+          .filter((sl) => sl.ativo)
+          .map((sl) => [sl.hotel || "", [...(sl.diasIds || [])].sort()]),
+      ])
+    ),
+    [estado.hospedagens]
+  );
+  const [avisoHosp, setAvisoHosp] = useState(false);
+
+  /* Espera a nuvem chegar antes de comparar: o estado inicial é diferente do
+     que está salvo, e comparar cedo demais acusaria mudança que não houve. */
+  useEffect(() => {
+    if (!carregado || sinc === "carregando") return;
+    try {
+      const visto = window.localStorage.getItem(CHAVE_AGENTE);
+      if (visto === null) { window.localStorage.setItem(CHAVE_AGENTE, assinaturaHosp); return; }
+      if (visto !== assinaturaHosp) setAvisoHosp(true);
+    } catch (e) { /* sem localStorage o app segue, só sem o lembrete */ }
+  }, [assinaturaHosp, carregado, sinc]);
+
+  const marcarRevisado = () => {
+    try { window.localStorage.setItem(CHAVE_AGENTE, assinaturaHosp); } catch (e) { /* segue */ }
+    setAvisoHosp(false);
+  };
+
+  const abrirAgente = () => {
+    setAgenteAberto(true);
+    setTimeout(() => {
+      agenteRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  };
 
   /* Deslize horizontal troca o dia no celular. Só reage a gestos claramente
      horizontais e rápidos — assim não briga com a rolagem nem com a edição. */
@@ -1645,6 +1914,91 @@ export default function App() {
     setEstado((s) => ({ ...s, roteiro: s.roteiro.map((d) => d.id !== diaId ? d
       : { ...d, atividades: [...d.atividades, { id: `${diaId}-${Date.now()}`, hora: "00:00", texto: "Nova atividade", tipo: "ponto", tipoAuto: true, link: "" }] }) }));
 
+  /* Aplica uma sugestão do agente. O servidor já conferiu os ids contra o
+     roteiro enviado, mas o estado pode ter mudado desde a consulta — então
+     cada operação procura o seu alvo de novo e, se não achar, não faz nada.
+     Nunca falha ruidosamente: a sugestão só deixa de ter efeito. */
+  const aplicarSugestao = (s) => {
+    /* Confere o alvo antes de mexer em qualquer coisa. Se a atividade já foi
+       apagada à mão desde a consulta, a sugestão não faz nada — e também não
+       leva a vista para outro dia, que seria um pulo sem motivo aparente. */
+    const dias0 = estadoRef.current.roteiro || [];
+    const temDia = (id) => dias0.some((d) => d.id === id);
+    const temAtiv = (id) => dias0.some((d) => (d.atividades || []).some((a) => a.id === id));
+    const aplicavel =
+      s.tipo === "mover" ? temAtiv(s.atividadeId) && temDia(s.paraDiaId)
+      : s.tipo === "criar" || s.tipo === "editar_dia" ? temDia(s.diaId)
+      : s.tipo === "remover" || s.tipo === "editar_atividade" ? temAtiv(s.atividadeId)
+      : false;
+    if (!aplicavel) return;
+
+    /* Entra na posição certa da lista pelo horário, sem reordenar o resto:
+       ordenar o dia inteiro mexeria em atividades que você pôs à mão. */
+    const inserir = (lista, nova) => {
+      const i = lista.findIndex((a) => String(a.hora || "") > String(nova.hora || ""));
+      return i < 0 ? [...lista, nova] : [...lista.slice(0, i), nova, ...lista.slice(i)];
+    };
+
+    setEstado((st) => {
+      const dias = st.roteiro || [];
+
+      if (s.tipo === "mover") {
+        const origem = dias.find((d) => d.id === s.deDiaId);
+        const ativ = origem && (origem.atividades || []).find((a) => a.id === s.atividadeId);
+        if (!ativ || !dias.some((d) => d.id === s.paraDiaId)) return st;
+        const movida = { ...ativ, hora: s.hora || ativ.hora };
+        return { ...st, roteiro: dias.map((d) => {
+          if (d.id === s.deDiaId) return { ...d, atividades: d.atividades.filter((a) => a.id !== s.atividadeId) };
+          if (d.id === s.paraDiaId) return { ...d, atividades: inserir(d.atividades, movida) };
+          return d;
+        }) };
+      }
+
+      if (s.tipo === "criar") {
+        if (!dias.some((d) => d.id === s.diaId)) return st;
+        const nova = {
+          id: `${s.diaId}-${Date.now()}`,
+          hora: s.hora || "12:00",
+          texto: s.texto || "",
+          tipo: s.icone || tipoPorTexto(s.texto || ""),
+          tipoAuto: !s.icone, /* sem ícone escolhido, ele acompanha o texto */
+          link: "",
+        };
+        return { ...st, roteiro: dias.map((d) => (d.id === s.diaId ? { ...d, atividades: inserir(d.atividades, nova) } : d)) };
+      }
+
+      if (s.tipo === "remover") {
+        return { ...st, roteiro: dias.map((d) => (d.id !== s.deDiaId ? d
+          : { ...d, atividades: d.atividades.filter((a) => a.id !== s.atividadeId) })) };
+      }
+
+      if (s.tipo === "editar_atividade") {
+        return { ...st, roteiro: dias.map((d) => (d.id !== s.deDiaId ? d
+          : { ...d, atividades: d.atividades.map((a) => {
+              if (a.id !== s.atividadeId) return a;
+              const nova = { ...a };
+              if (s.hora) nova.hora = s.hora;
+              if (s.texto) {
+                nova.texto = s.texto;
+                if (a.tipoAuto === true) nova.tipo = tipoPorTexto(s.texto, a.tipo);
+              }
+              return nova;
+            }) })) };
+      }
+
+      if (s.tipo === "editar_dia") {
+        return { ...st, roteiro: dias.map((d) => (d.id === s.diaId ? { ...d, [s.campo]: s.valor } : d)) };
+      }
+
+      return st;
+    });
+
+    /* Leva a vista para o dia afetado — assim dá para conferir na hora. */
+    const idAlvo = s.paraDiaId || s.diaId || s.deDiaId;
+    const i = (estadoRef.current.roteiro || []).findIndex((d) => d.id === idAlvo);
+    if (i >= 0) setAtivo(i);
+  };
+
   const alternarAlerta = (id) =>
     setEstado((s) => ({ ...s, alertas: s.alertas.map((a) => (a.id === id ? { ...a, feito: !a.feito } : a)) }));
 
@@ -1858,6 +2212,25 @@ export default function App() {
         {/* ROTEIRO */}
         {aba === "roteiro" && (
           <div>
+            {avisoHosp && (
+              <div className="mb-3 flex items-center gap-2 rounded-xl border border-fuchsia-400/30 bg-fuchsia-500/[0.1] pl-3.5 pr-2 py-2">
+                <Sparkles size={14} className="shrink-0 text-fuchsia-300" />
+                <button
+                  onClick={abrirAgente}
+                  className="flex-1 min-w-0 text-left text-[13px] text-[#fbebd9]/80 hover:text-[#fbebd9] transition-colors rounded focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                >
+                  A hospedagem mudou desde a última revisão. Revisar o roteiro?
+                </button>
+                <button
+                  onClick={marcarRevisado}
+                  aria-label="Dispensar aviso"
+                  className="shrink-0 p-1.5 rounded-lg text-[#fbebd9]/45 hover:text-[#fbebd9]/80 hover:bg-[#fbebd9]/10 transition-colors focus:outline-none focus:ring-2 focus:ring-fuchsia-300/70"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <div
               ref={tiraRef}
               data-sem-deslize
@@ -2024,6 +2397,18 @@ export default function App() {
                 </div>
               </div>
             </article>
+
+            <div ref={agenteRef} className="mt-3">
+              <PainelAgente
+                vidro={vidro}
+                estado={estado}
+                aberto={agenteAberto}
+                onAlternar={() => setAgenteAberto((v) => !v)}
+                aviso={avisoHosp}
+                onRevisado={marcarRevisado}
+                aoAplicar={aplicarSugestao}
+              />
+            </div>
           </div>
         )}
 
