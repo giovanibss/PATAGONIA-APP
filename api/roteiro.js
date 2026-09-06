@@ -45,7 +45,7 @@
 /* Muda a cada versão deste arquivo e aparece no GET. Serve para você
    conferir, abrindo /api/roteiro no navegador, QUAL versão está no ar —
    sem depender de olhar o repositório ou os logs. */
-const VERSAO = 'esm-3';
+const VERSAO = 'esm-4';
 
 const MODELOS = [
   { id: 'claude-sonnet-5',            nome: 'Sonnet 5',   nota: 'equilibrado — o padrão' },
@@ -77,7 +77,7 @@ REGRAS ABSOLUTAS:
 - Distâncias na Patagônia são grandes e as estradas são lentas. Não empilhe num mesmo dia passeios que ficam a horas de carro um do outro, e não proponha bate-volta que não caiba na luz do dia.
 - Há uma criança pequena junto. Nada de trilha longa, travessia de geleira com restrição de idade, ou dia que comece antes das 6h e termine depois das 22h.
 - Não invente atrativo que não existe. Se não tiver certeza de que um lugar existe e fica onde você acha que fica, não sugira.
-- No máximo 6 sugestões. Menos é melhor. Se o roteiro estiver coerente com a hospedagem, devolva a lista vazia e diga isso no resumo.
+- No máximo 4 sugestões. Menos é melhor. Se o roteiro estiver coerente com a hospedagem, devolva a lista vazia e diga isso no resumo.
 
 FORMATO DA RESPOSTA — responda SOMENTE com um objeto JSON, sem cercas de código, sem nenhum texto antes ou depois:
 
@@ -87,7 +87,7 @@ FORMATO DA RESPOSTA — responda SOMENTE com um objeto JSON, sem cercas de códi
     {
       "tipo": "mover",
       "titulo": "frase curta, até 60 caracteres",
-      "porque": "1 a 2 frases explicando o motivo",
+      "porque": "no máximo 2 frases curtas explicando o motivo",
       "atividadeId": "id existente",
       "deDiaId": "id existente",
       "paraDiaId": "id existente",
@@ -126,7 +126,9 @@ FORMATO DA RESPOSTA — responda SOMENTE com um objeto JSON, sem cercas de códi
 
 Em "mover", "hora" é opcional — mande só se o horário precisar mudar no dia de destino.
 Em "editar_atividade", mande "hora", "texto", ou os dois.
-Escreva os textos de atividade no mesmo estilo dos que já estão lá: descritivos, sem emoji, com "· RESERVAR" no fim quando exigir reserva antecipada.`;
+Escreva os textos de atividade no mesmo estilo dos que já estão lá: descritivos, sem emoji, com "· RESERVAR" no fim quando exigir reserva antecipada.
+
+Seja econômico: nada de repetir o roteiro recebido, nada de listar o que você NÃO vai mudar, nada de comentário fora do JSON.`;
 
 /* ── Portaria ─────────────────────────────────────────────────
    Passa quem veio do mesmo domínio da função. O Origin é mandado pelo
@@ -333,11 +335,13 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: modelo,
-        /* Folgado de propósito. Com 3000, Opus e Sonnet tinham a resposta
-           cortada no meio de uma sugestão e o JSON não fechava; o Haiku,
-           mais econômico, passava. Teto alto não custa nada quando não é
-           usado — só os tokens realmente escritos são cobrados. */
-        max_tokens: 8000,
+        /* Teto largo de propósito. Só os tokens realmente escritos são
+           cobrados, então um teto alto não gasta nada quando não é usado —
+           ele existe para a resposta não ser cortada, não para economizar.
+           Com 3000 e depois com 8000, Opus e Sonnet ainda vinham cortados:
+           esses modelos raciocinam antes de escrever, e o raciocínio consome
+           o mesmo orçamento. O Haiku, mais direto, passava nos dois. */
+        max_tokens: 32000,
         system: SISTEMA,
         messages: [{ role: 'user', content: pergunta }]
       })
@@ -358,11 +362,15 @@ export default async function handler(req, res) {
     const dados = lerJSON(texto);
     if (!dados) {
       /* Sem isso o erro é sempre o mesmo e não dá para saber o que houve. */
-      const cortado = j.stop_reason === 'max_tokens';
+      /* Diz o que houve com números, não com adjetivos: quantos tokens o
+         modelo produziu e quanto disso virou texto. Se produziu muito e
+         escreveu pouco, o orçamento foi embora no raciocínio. */
+      const saida = j.usage ? j.usage.output_tokens : 0;
       return res.status(502).json({
-        erro: cortado
-          ? 'A resposta foi cortada antes do fim. Tente de novo, ou peça menos coisas de uma vez.'
-          : 'Não consegui ler a resposta do modelo. Começo do que veio: ' + texto.slice(0, 150),
+        erro: 'Não consegui ler a resposta do modelo ('
+          + saida + ' tokens produzidos, ' + texto.length + ' caracteres de texto'
+          + (j.stop_reason === 'max_tokens' ? ', cortada no limite' : ', motivo: ' + j.stop_reason)
+          + '). Começo do que veio: ' + (texto.slice(0, 150) || '(nada)'),
         detalhe: texto.slice(0, 400)
       });
     }
