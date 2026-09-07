@@ -377,6 +377,10 @@ const CHAVE = "patagonia-dez-2026";
    no estado da viagem: é lembrete de leitura, não dado a sincronizar. */
 const CHAVE_AGENTE = "kooka-hospedagem-vista";
 
+/* Retrato do roteiro na última conversa com o agente. É o que permite dizer
+   "você adicionou o Mirador" em vez de só "o roteiro está assim". */
+const CHAVE_RETRATO = "kooka-agente-retrato";
+
 /* Fundos cênicos em rotação. Troque por fotos suas colocando os arquivos
    em public/fundos/ e usando caminhos como "/fundos/fitzroy.jpg". */
 const FUNDOS = [
@@ -1191,7 +1195,74 @@ function CardRetratil({ titulo, resumo, aberto, onAlternar, onExcluir, vidro, ch
    O modelo nunca edita nada: devolve operações, o servidor confere cada uma
    contra os ids que existem de verdade, e aqui elas viram cartões. Nada
    entra no roteiro sem um clique em "aplicar". */
-function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, aoAplicar }) {
+
+/* ── O que mudou desde a última conversa ──────────────────────────
+   Em vez de instrumentar cada função que edita alguma coisa — e esquecer
+   uma —, o app guarda um retrato enxuto e compara. Também pega mudança
+   feita no outro aparelho, que instrumentação nenhuma pegaria. */
+function retratoAgente(estado) {
+  return {
+    dias: (estado.roteiro || []).map((d) => ({
+      id: d.id, n: d.n, titulo: d.titulo, base: d.base, nota: d.nota,
+      ativs: (d.atividades || []).map((a) => ({ id: a.id, hora: a.hora, texto: a.texto })),
+    })),
+    hoteis: (estado.hospedagens || []).map((b) => ({
+      nome: b.nome,
+      slots: (b.slots || []).filter((sl) => sl.ativo).map((sl) => ({
+        hotel: sl.hotel || "(sem nome)",
+        dias: [...(sl.diasIds || [])].sort().join(", ") || "sem dias",
+      })),
+    })),
+  };
+}
+
+function diferencas(antes, agora) {
+  if (!antes || !Array.isArray(antes.dias)) return [];
+  const fora = [];
+
+  /* Mapa global de atividades: assim uma atividade que trocou de dia aparece
+     como "movida", e não como uma remoção seguida de uma adição. */
+  const posicao = (r) => {
+    const m = new Map();
+    r.dias.forEach((d) => (d.ativs || []).forEach((a) => m.set(a.id, { dia: d, ativ: a })));
+    return m;
+  };
+  const pAntes = posicao(antes);
+  const pAgora = posicao(agora);
+
+  pAgora.forEach(({ dia, ativ }, id) => {
+    const v = pAntes.get(id);
+    if (!v) { fora.push(`Dia ${dia.n}: atividade ADICIONADA — ${ativ.hora} ${ativ.texto}`); return; }
+    if (v.dia.id !== dia.id) fora.push(`"${ativ.texto}" foi movida do dia ${v.dia.n} para o dia ${dia.n}`);
+    else if (v.ativ.texto !== ativ.texto) fora.push(`Dia ${dia.n}: "${v.ativ.texto}" virou "${ativ.texto}"`);
+    else if (v.ativ.hora !== ativ.hora) fora.push(`Dia ${dia.n}: "${ativ.texto}" mudou de ${v.ativ.hora} para ${ativ.hora}`);
+  });
+  pAntes.forEach(({ dia, ativ }, id) => {
+    if (!pAgora.has(id)) fora.push(`Dia ${dia.n}: atividade REMOVIDA — ${ativ.hora} ${ativ.texto}`);
+  });
+
+  const dAntes = new Map(antes.dias.map((d) => [d.id, d]));
+  agora.dias.forEach((d) => {
+    const v = dAntes.get(d.id);
+    if (!v) return;
+    if (v.base !== d.base) fora.push(`Dia ${d.n}: a base mudou de ${v.base} para ${d.base}`);
+    if (v.titulo !== d.titulo) fora.push(`Dia ${d.n}: o título virou "${d.titulo}"`);
+    if ((v.nota || "") !== (d.nota || "")) fora.push(`Dia ${d.n}: a nota foi alterada`);
+  });
+
+  const hAntes = new Map((antes.hoteis || []).map((b) => [b.nome, JSON.stringify(b.slots)]));
+  (agora.hoteis || []).forEach((b) => {
+    const v = hAntes.get(b.nome);
+    if (v === undefined || v === JSON.stringify(b.slots)) return;
+    fora.push(`Hospedagem em ${b.nome}: agora ${b.slots.length
+      ? b.slots.map((sl) => `${sl.hotel} nos dias ${sl.dias}`).join("; ")
+      : "nenhum hotel ativo"}`);
+  });
+
+  return fora.slice(0, 20);
+}
+
+function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, mudancas, onRevisado, aoAplicar }) {
   const [modelos, setModelos] = useState([]);
   const [modeloSug, setModeloSug] = useState("");
   const [modelo, setModelo] = useState("");
@@ -1246,7 +1317,7 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
     setCarregando(true);
     setErro(""); setResumo(""); setSugestoes([]); setResolvidas({});
     try {
-      const j = await chamar({ pedido });
+      const j = await chamar({ pedido, mudancas });
       setResumo(j.resumo || "");
       setSugestoes(Array.isArray(j.sugestoes) ? j.sugestoes : []);
       onRevisado(); /* consultar é revisar: a faixa some */
@@ -1323,9 +1394,23 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
           {/* ── Sugestões ── */}
           <div className="space-y-3">
             <p className="text-sm text-[#fbebd9]/50">
-              Ele lê os dias, as atividades e os hotéis ativos, e propõe remanejos.
-              Nada muda no roteiro até você aplicar.
+              Ele comenta o que você mexeu desde a última conversa e, quando fizer
+              sentido, propõe ajustes. Nada muda no roteiro até você aplicar.
             </p>
+
+            {mudancas.length > 0 && (
+              <div className="rounded-xl border border-[#fbebd9]/10 bg-[#fbebd9]/[0.04] p-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#fbebd9]/45 mb-2">
+                  {mudancas.length} mudança{mudancas.length === 1 ? "" : "s"} desde a última conversa
+                </div>
+                <ul className="space-y-1 text-[13px] text-[#fbebd9]/60 leading-snug">
+                  {mudancas.slice(0, 5).map((m, i) => <li key={i}>· {m}</li>)}
+                  {mudancas.length > 5 && (
+                    <li className="text-[#fbebd9]/40">· e mais {mudancas.length - 5}</li>
+                  )}
+                </ul>
+              </div>
+            )}
 
             <textarea
               value={pedido}
@@ -1339,7 +1424,7 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
               <button onClick={consultar} disabled={carregando} className={botao}>
                 {carregando
                   ? <><RefreshCw size={14} className="animate-spin" /> Pensando…</>
-                  : <><Sparkles size={14} /> Sugerir mudanças</>}
+                  : <><Sparkles size={14} /> {mudancas.length ? "Comentar o que mudei" : "Revisar o roteiro"}</>}
               </button>
               {modeloSug && (
                 <span className="text-[10px] uppercase tracking-wider text-[#fbebd9]/35">
@@ -1349,7 +1434,11 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
             </div>
 
             {erro && <Falha texto={erro} />}
-            {resumo && <p className="text-sm text-[#fbebd9]/75 leading-relaxed">{resumo}</p>}
+            {resumo && (
+              <div className="rounded-xl border border-fuchsia-400/20 bg-fuchsia-500/[0.07] p-4 text-[15px] leading-relaxed text-[#fbebd9]/85 whitespace-pre-wrap">
+                {resumo}
+              </div>
+            )}
 
             {sugestoes.length > 0 && (
               <ul className="space-y-2.5">
@@ -1406,7 +1495,7 @@ function PainelAgente({ vidro, estado, aberto, onAlternar, aviso, onRevisado, ao
             )}
 
             {!carregando && !erro && resumo && sugestoes.length === 0 && (
-              <p className="text-sm text-[#fbebd9]/45 italic">Nenhuma mudança proposta.</p>
+              <p className="text-sm text-[#fbebd9]/45 italic">Sem ajustes a propor.</p>
             )}
           </div>
 
@@ -1517,6 +1606,31 @@ export default function App() {
       if (visto !== assinaturaHosp) setAvisoHosp(true);
     } catch (e) { /* sem localStorage o app segue, só sem o lembrete */ }
   }, [assinaturaHosp, carregado, sinc]);
+
+  /* O retrato da última conversa. Fica no aparelho junto com o lembrete:
+     os dois são memória de leitura, não dado da viagem. */
+  const [retrato, setRetrato] = useState(null);
+  useEffect(() => {
+    if (!carregado || sinc === "carregando" || retrato) return;
+    try {
+      const bruto = window.localStorage.getItem(CHAVE_RETRATO);
+      setRetrato(bruto ? JSON.parse(bruto) : retratoAgente(estado));
+    } catch (e) { setRetrato(retratoAgente(estado)); }
+  }, [carregado, sinc, retrato, estado]);
+
+  const mudancas = useMemo(
+    () => diferencas(retrato, retratoAgente(estado)),
+    [retrato, estado]
+  );
+
+  /* Chamado depois de uma consulta: o que foi comentado vira o novo ponto
+     de partida, para a próxima conversa falar só do que veio depois. */
+  const marcarConversado = () => {
+    const novo = retratoAgente(estado);
+    try { window.localStorage.setItem(CHAVE_RETRATO, JSON.stringify(novo)); } catch (e) { /* segue */ }
+    setRetrato(novo);
+    marcarRevisado();
+  };
 
   const marcarRevisado = () => {
     try { window.localStorage.setItem(CHAVE_AGENTE, assinaturaHosp); } catch (e) { /* segue */ }
@@ -2460,7 +2574,8 @@ export default function App() {
                 aberto={agenteAberto}
                 onAlternar={() => setAgenteAberto((v) => !v)}
                 aviso={avisoHosp}
-                onRevisado={marcarRevisado}
+                mudancas={mudancas}
+                onRevisado={marcarConversado}
                 aoAplicar={aplicarSugestao}
               />
             </div>
