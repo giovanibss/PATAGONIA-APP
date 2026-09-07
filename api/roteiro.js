@@ -52,7 +52,7 @@
 /* Muda a cada versão deste arquivo e aparece no GET. Serve para você
    conferir, abrindo /api/roteiro no navegador, QUAL versão está no ar —
    sem depender de olhar o repositório ou os logs. */
-const VERSAO = 'esm-5';
+const VERSAO = 'esm-6';
 
 const MODELO_SUGESTOES = { id: 'claude-haiku-4-5-20251001', nome: 'Haiku 4.5' };
 
@@ -72,10 +72,19 @@ const SISTEMA = `Você é o assistente de roteiro de um app chamado Kooka Planne
 O QUE VOCÊ RECEBE:
 - O roteiro inteiro: cada dia tem id, número, data, título, base (a cidade onde se dorme), uma nota e uma lista de atividades. Cada atividade tem id, hora, texto e um tipo de ícone.
 - As hospedagens: cada base tem hotéis, e cada hotel ATIVO carrega os ids dos dias que cobre. É daí que sai quantas noites você realmente dorme em cada lugar.
+- A LISTA DO QUE MUDOU desde a última vez que vocês conversaram, quando houver.
 - Um pedido em texto livre do usuário, quando houver.
 
-O QUE VOCÊ FAZ:
-Compara o que o roteiro assume com o que a hospedagem diz de fato, e propõe o remanejo. Se o usuário trocou o hotel de uma base por outro em outra cidade, os passeios daqueles dias podem ter ficado longe demais, ou sobrou um dia sem nada, ou faltou dia para o que estava planejado. É isso que você resolve.
+SEU TRABALHO, NESTA ORDEM:
+
+1. REAJA AO QUE MUDOU. É a parte principal, e é por ela que você começa. Para cada mudança que importa:
+   - Atividade adicionada: diga o que aquele lugar é, quanto tempo costuma tomar, e o que ele exige — reserva antecipada, idade mínima, carro alto, dia de tempo bom, entrada comprada antes.
+   - Atividade removida: se ela valia a pena, diga por que valia e pergunte se foi proposital. Não engula uma remoção que parece perda.
+   - Base ou hotel trocado: diga o efeito nas estradas e no tempo de deslocamento dos dias afetados.
+   - Horário alterado: diga se cria aperto com o que vem antes ou depois.
+   Se não houver mudança nenhuma na lista, aí sim olhe o roteiro como um todo.
+
+2. SÓ DEPOIS proponha operações, e só quando houver ganho real. Zero sugestões é uma resposta perfeitamente boa — comentar sem propor nada é o caso comum, não a exceção.
 
 REGRAS ABSOLUTAS:
 - Você NÃO edita nada. Devolve operações, e o usuário aprova uma a uma.
@@ -85,12 +94,14 @@ REGRAS ABSOLUTAS:
 - Distâncias na Patagônia são grandes e as estradas são lentas. Não empilhe num mesmo dia passeios que ficam a horas de carro um do outro, e não proponha bate-volta que não caiba na luz do dia.
 - Há uma criança pequena junto. Nada de trilha longa, travessia de geleira com restrição de idade, ou dia que comece antes das 6h e termine depois das 22h.
 - Não invente atrativo que não existe. Se não tiver certeza de que um lugar existe e fica onde você acha que fica, não sugira.
-- No máximo 4 sugestões. Menos é melhor. Se o roteiro estiver coerente com a hospedagem, devolva a lista vazia e diga isso no resumo.
+- NÃO INVENTE FONTE. Nada de citar perfis do Instagram ou do YouTube, blogs, guias, nomes de pessoas, notas ou avaliações. Você não tem acesso à internet, e um "@" inventado é mentira que só é descoberta lá na frente. Diga o que o lugar é e o que ele exige — isso você sabe sem precisar de fonte.
+- NÃO SUGIRA REMOVER só para enxugar o dia. Remoção só quando houver conflito real de tempo, de deslocamento ou de segurança.
+- No máximo 4 sugestões, e é um teto, não uma meta.
 
 FORMATO DA RESPOSTA — responda SOMENTE com um objeto JSON, sem cercas de código, sem nenhum texto antes ou depois:
 
 {
-  "resumo": "1 a 3 frases sobre o que mudou e o que você propôs. Português do Brasil, direto, sem saudação.",
+  "comentario": "3 a 8 frases reagindo ao que mudou, em prosa corrida. Português do Brasil, direto, sem saudação e sem títulos. É a parte que o usuário mais lê — não a trate como resumo protocolar.",
   "sugestoes": [
     {
       "tipo": "mover",
@@ -350,10 +361,19 @@ export default async function handler(req, res) {
 
   const texto_pedido = String(pedido || '').trim().slice(0, 2000);
 
+  /* O que o usuário mexeu desde a última conversa. Sem isso o modelo só
+     sabe como o roteiro está, não o que acabou de acontecer — e aí o único
+     movimento que lhe ocorre é enxugar. */
+  const mudancas = (Array.isArray(corpo.mudancas) ? corpo.mudancas : [])
+    .slice(0, 20).map(m => String(m).slice(0, 240));
+
   const pergunta =
     'Roteiro atual:\n\n' + JSON.stringify(dias, null, 1) +
     '\n\nHospedagem ativa (é ela que manda em quantas noites há em cada base):\n\n' +
     JSON.stringify(bases, null, 1) +
+    (mudancas.length
+      ? '\n\nO QUE MUDOU desde a nossa última conversa:\n' + mudancas.map(m => '- ' + m).join('\n')
+      : '\n\n(Nada mudou no roteiro desde a última conversa.)') +
     '\n\n---\n\n' +
     (analise
       ? (texto_pedido
@@ -424,7 +444,7 @@ export default async function handler(req, res) {
     if (descartadas.length) console.log('[kooka/roteiro] descartadas', JSON.stringify(descartadas));
 
     return res.status(200).json({
-      resumo: String(dados.resumo || '').trim().slice(0, 600),
+      resumo: String(dados.comentario || dados.resumo || '').trim().slice(0, 1200),
       sugestoes,
       modelo,
       custo: j.usage ? { entrada: j.usage.input_tokens, saida: j.usage.output_tokens } : null
